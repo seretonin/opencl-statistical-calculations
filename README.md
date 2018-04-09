@@ -8,3 +8,7 @@ When working with data sets created from natural processes, it is often importan
 - Parallelise calculation of average/median/standard deviation etc 
 - Improve performance if possible
 - Test cross-platform performance
+
+
+
+https://developer.nvidia.com/opencl code examples from nvidia :-) 
