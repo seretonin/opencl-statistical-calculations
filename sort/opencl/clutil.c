@@ -3,7 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include <CL/cl.h>
-#include "clutil.h"
+
 
 const char *clGetErrorString(cl_int error)
 {

@@ -3,24 +3,22 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/time.h>
 #include <time.h>
 
-// To suppress warnings on deprecated APIs
+//to suppress warnings on deprecated APIs
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
-#include <CL/cl.h>
+#define GROUP_SIZE 256
 
+#include <CL/cl.h>
 #include "util.h"
 #include "clutil.h"
-// How big should the group size be pls help
-#define GROUP_SIZE     256
-// How big should our data be?? Currently this is 262144
-const unsigned int INPUT_LENGTH = 1<<18;
+const unsigned int INPUT_LENGTH = 1<<16;
 
-// Descending order = 0
-// Ascending order = 1
-const cl_uint sortOrder = 1; 
+//descending order = 0
+//ascending order = 1
+const cl_uint sort_order = 1; 
 
-// Check if the data is a sorted array
 int checkResult(int *data, int length, int ascend){
     if (ascend == TRUE){
         for(int i = 0; i < length-1; i++){
@@ -45,8 +43,24 @@ void fillRandomData(int *data, int length){
     }
 }
 
+double getTime(){
+	
+  struct timeval t;
+  double sec, msec;
+  
+  while (gettimeofday(&t, NULL) != 0);
+  sec = t.tv_sec;
+  msec = t.tv_usec;
+  
+  sec = sec + msec/1000000.0;
+  
+  return sec;
+}
+
 int main(int argc, char *argv[])
 {
+	double t1 = 0.0;
+	double t2 = 0.0; 		
     cl_int err;
     cl_uint numPlatforms = 0;
 	cl_platform_id *platforms = NULL;
@@ -55,18 +69,17 @@ int main(int argc, char *argv[])
     const int datasize = length * sizeof(int);
     int *input = NULL;    //input array on host
     int *output = NULL;   //output array on host
-    cl_mem inputBuffer = NULL;  // Input array on the device
+    cl_mem inputBuffer = NULL;  //input array on the device
 
-    {
-        input = (int *)malloc(INPUT_LENGTH * sizeof(int));
-        output = (int *)malloc(INPUT_LENGTH * sizeof(int));
+	input = (int *)malloc(INPUT_LENGTH * sizeof(int));
+	output = (int *)malloc(INPUT_LENGTH * sizeof(int));
 
-        memset(input, 0, INPUT_LENGTH * sizeof(int));
-        memset(output, 0, INPUT_LENGTH * sizeof(int));
-        fillRandomData(input, length);
-    }
+	memset(input, 0, INPUT_LENGTH * sizeof(int));
+	memset(output, 0, INPUT_LENGTH * sizeof(int));
+	fillRandomData(input, length);
 
-	// Use clGetPlatformIDs() to retrieve the number of platforms
+
+	//retrieve # of platforms
 	err = clGetPlatformIDs(0, NULL, &numPlatforms);
     if (err == CL_SUCCESS) {
 	    assert(err == CL_SUCCESS);
@@ -96,38 +109,34 @@ int main(int argc, char *argv[])
     }
     printf("found %d platforms.\n", numPlatforms);
 
-	// Allocate enough space for each platform
+	//memory allocation on platform(s)
 	platforms =	(cl_platform_id*)malloc(numPlatforms*sizeof(cl_platform_id));
     if (platforms != NULL) {	
         assert(platforms != NULL);
     }
 
-    // Fill in platforms with clGetPlatformIDs()
+    //fill in platform(s)
 	err = clGetPlatformIDs(numPlatforms, platforms, NULL);
     if (err == CL_SUCCESS) {
 	    assert(err == CL_SUCCESS);
     }
 
-
     cl_uint numDevices = 0;
 	cl_device_id *devices = NULL;
 
-	// Use clGetDeviceIDs() to retrieve the number of
-	// devices present
+	//retrieve # of GPU(s)
 	err = clGetDeviceIDs(platforms[0],
-                         CL_DEVICE_TYPE_GPU,     //only get GPU
+                         CL_DEVICE_TYPE_GPU, 
                          0,
                          NULL,
                          &numDevices);
     if(numDevices > 0){
         printf("found %d GPUs for platform 0 \n", numDevices);
-        printf("erm here?");
     }else{
         err = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU,
                                 0, NULL, &numDevices);
         if(numDevices > 0){
             printf("found %d CPUs for platform 0 \n", numDevices);
-            printf("wtf opencl");
         }else{
             printf("can't find CPU or GPU devices\n");
             exit(-1);
@@ -138,7 +147,7 @@ int main(int argc, char *argv[])
 	    assert(err == CL_SUCCESS);
     }
 
-	// Allocate enough space for each device
+	//memory allocation on device(s)
 	devices = (cl_device_id*)malloc(numDevices*sizeof(cl_device_id));
     if (devices != NULL) {
         assert(devices);
@@ -153,113 +162,92 @@ int main(int argc, char *argv[])
 		NULL);
 	clCheckEqWithMsg(err, CL_SUCCESS, "can't get devices.");
 
-    //-----------------------------------------------------
-	// Create a context
-	//-----------------------------------------------------
+
+	//create a context
 	cl_context ctx = NULL;
 
 	ctx = clCreateContext(NULL, numDevices, devices, NULL, NULL, &err);
 	clCheckEqWithMsg(err, CL_SUCCESS, "Can't create context.");
 
-	//-----------------------------------------------------
-	// Create a command queue
-	//-----------------------------------------------------
-
+	//create a command queue
 	cl_command_queue queue;
 
 	queue = clCreateCommandQueue(ctx, devices[0], 0, &err);
 	clCheckEqWithMsg(err, CL_SUCCESS, "Can't create command queue..");
 
-	//-----------------------------------------------------
-	// Create device buffers
-	//-----------------------------------------------------
+	//create device buffers
 	inputBuffer = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
                                  datasize, NULL, &err);
     clCheckEqWithMsg(err, CL_SUCCESS, "can't create device buffer...\n");
-	//-----------------------------------------------------
-	// Write host data to device buffers
-	//-----------------------------------------------------
+
+	//write host data to device buffers
 	err = clEnqueueWriteBuffer(queue, inputBuffer, CL_FALSE, 0,
                                datasize, input, 0, NULL, NULL);
     clCheckEqWithMsg(err, CL_SUCCESS, "can't write host data to device buffer.\n");
-	//-----------------------------------------------------
-	// STEP 7: Create and compile the program
-	//-----------------------------------------------------
+
+
+	//create and compile the program
 	char *pgmSource = (char *)readFile("bsortKernel.cl");
 
-	// Create a program using clCreateProgramWithSource()
+	//create a program using clCreateProgramWithSource()
 	cl_program program = clCreateProgramWithSource(ctx,
                                                    1,
                                                    (const char**)&pgmSource,
                                                    NULL,
                                                    &err);
     clCheckEqWithMsg(err, CL_SUCCESS, "can't create program..");
-	// Build (compile) the program for the devices with clBuildProgram()
+    
+	//build (compile) the program for the device(s)
 	err = clBuildProgram(program, numDevices, devices, NULL, NULL, NULL);
     clCheckEqWithMsg(err, CL_SUCCESS, "Can't build program.");
-	//-----------------------------------------------------
-	// Create the kernel
-	//-----------------------------------------------------
+    
+	//create the kernel
 	cl_kernel kernel = NULL;
 
 	kernel = clCreateKernel(program, "parallelBitonicSort", &err);
 	clCheckEqWithMsg(err, CL_SUCCESS, "Can't get kernel from program.");
-	//-----------------------------------------------------
-	// Set the kernel arguments
-	//-----------------------------------------------------
+	
+	//set the kernel arguments
     err = clSetKernelArg(kernel, 0, sizeof(cl_mem),(void*)&inputBuffer);
-    err |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&sortOrder);
+    err |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&sort_order);
 
 	clCheckEqWithMsg(err, CL_SUCCESS, "Can't set kernel's arguments.");
 
-	//-----------------------------------------------------
-	// Configure the work-item structure
-	//-----------------------------------------------------
-
-	//-----------------------------------------------------
-	// Enqueue the kernel for execution
-	//-----------------------------------------------------
+	//enqueue the kernel for execution
     cl_uint stages = 0;
     for(unsigned int i = INPUT_LENGTH; i > 1; i >>= 1){
         ++stages;
     }
 
-    size_t globalThreads[1] = {INPUT_LENGTH/2};
+	//configure the work-item structure
+	size_t globalThreads[1] = {INPUT_LENGTH/2};
+    
     size_t threadsPerGroup[1] = {GROUP_SIZE};
 
+	t1 = getTime();
 	for(cl_uint stage = 0; stage < stages; ++stage) {
         clSetKernelArg(kernel, 1, sizeof(cl_uint),(void*)&stage);
 
         for(cl_uint subStage = 0; subStage < stage +1; subStage++) {
             clSetKernelArg(kernel, 2, sizeof(cl_uint),(void*)&subStage);
             cl_event exeEvt;
-            cl_ulong executionStart, executionEnd;
             err = clEnqueueNDRangeKernel(queue,
-                                         kernel,
-                                         1,
-                                         NULL,
-                                         globalThreads,
-                                         threadsPerGroup,
-                                         0,
-                                         NULL,
-                                         &exeEvt);
+										kernel,
+										1,
+										NULL,
+										globalThreads,
+										threadsPerGroup,
+										0,
+										NULL,
+										&exeEvt);
             clWaitForEvents(1, &exeEvt);
             clCheckEqWithMsg(err, CL_SUCCESS, "Kernel execution failure!\n");
 
-            // let's understand how long it took?
-            clGetEventProfilingInfo(exeEvt, CL_PROFILING_COMMAND_START, sizeof(executionStart), &executionStart, NULL);
-            clGetEventProfilingInfo(exeEvt, CL_PROFILING_COMMAND_END, sizeof(executionEnd), &executionEnd, NULL);
-            clReleaseEvent(exeEvt);
-            
-			//printf("\n %lu\t",executionStart);
-			//printf("%lu",executionEnd);
-            //printf("Execution of the bitonic sort took %lu.%lu s\n", (executionEnd - executionStart)/1000000000, (executionEnd - executionStart)%1000000000);
-        }
+		}
     }
-
-	//-----------------------------------------------------
-	// Read the output buffer back to the host
-	//-----------------------------------------------------
+	t2 = getTime();
+	
+	//read the output buffer back to the host
 	clEnqueueReadBuffer(queue,
                         inputBuffer,
                         CL_TRUE,
@@ -270,22 +258,33 @@ int main(int argc, char *argv[])
                         NULL,
                         NULL);
 
-	// Print the sorted data
+	//print the sorted data
     for(unsigned int i = 0; i < INPUT_LENGTH; i++) {
-         printf("%d\n", output[i]); 
+        printf("%d\t", output[i]); 
+        if (i%5 == 0) {
+			printf("\n");
+		} 
 	}
-	printf("INPUT_LENGTH: %d\n",INPUT_LENGTH);
-    printf("checking result...\n");
-    int ret = checkResult(output, INPUT_LENGTH, sortOrder);
-    if (ret == TRUE)
-        printf("sort success..\n");
-    else
-        printf("sort fail...\n");
-	//-----------------------------------------------------
-	// Release OpenCL resources
-	//-----------------------------------------------------
+	
+    int ret = checkResult(output, INPUT_LENGTH, sort_order);
+    if (ret == TRUE) {
+		printf("\n-----------------------------------------\n");
+		printf("INPUT_LENGTH : %d\n",INPUT_LENGTH);
+		printf("median       : %d\n",output[INPUT_LENGTH/2]);
+		printf("min          : %d\n", output[0]);
+		printf("max          : %d\n", output[INPUT_LENGTH-1]);
+		printf("time taken   : %6.5f secs\n",(t2 - t1));		
+		printf("-------------------------------------------\n");		
+	}							
+    else {
+		printf("\n-----------------------------------------\n");		
+        printf("results are unavailable. data is NOT sorted\n");
+		printf("\n-----------------------------------------\n");    
+    }
+    
+	//release OpenCL resources
 
-	// Free OpenCL resources
+	//free OpenCL resources
 	clReleaseKernel(kernel);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(queue);
@@ -294,7 +293,7 @@ int main(int argc, char *argv[])
 
 	clReleaseContext(ctx);
 
-	// Free host resources
+	//free host resources
 	Free(platforms);
 	Free(devices);
 	Free(pgmSource);
