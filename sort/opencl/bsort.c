@@ -3,125 +3,109 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
-#include <sys/time.h>
 #include <time.h>
 
-//to suppress warnings on deprecated APIs
+// To suppress warnings on deprecated APIs
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
+
 #include "util.h"
 #include "clutil.h"
-//how big should the group size be pls help
-#define GROUP_SIZE 32
-const unsigned int INPUT_ARRAY_LENGTH = 1000000;
+// How big should the group size be pls help
+#define GROUP_SIZE     256
+// How big should our data be?? Currently this is 262144
+const unsigned int INPUT_LENGTH = 1<<18;
 
-//descending order = 0
-//ascending order = 1
-const cl_uint sorting_order = 1; 
+// Descending order = 0
+// Ascending order = 1
+const cl_uint sortOrder = 1; 
 
-double getTime(){
-  struct timeval t;
-  double sec, msec;
-  
-  while (gettimeofday(&t, NULL) != 0);
-  sec = t.tv_sec;
-  msec = t.tv_usec;
-  
-  sec = sec + msec/1000000.0;
-  
-  return sec;
+// Check if the data is a sorted array
+int checkResult(int *data, int length, int ascend){
+    if (ascend == TRUE){
+        for(int i = 0; i < length-1; i++){
+            if(data[i] > data[i+1]){
+                return FALSE;
+            }
+        }
+    }else{
+        for(int i = 0; i < length; i++){
+            if(data[i] < data[i+1]){
+                return FALSE;
+            }
+        }
+    }
+    return TRUE;
 }
 
-/* This function checks if the array has been sorted 
- * ascendingly/descendingly, depending on the parameter ascend and 
- * returns a TRUE/FALSE */
-int checkIfArrayIsSorted(int *data, int array_length, int ascend) {
-	int i,j;
-	if (ascend) {
-		for (i = 0; i < array_length - 1; i++) {
-			if (data[i] > data[i+1]) {
-				return FALSE;
-			}
-		}
-	}
-	else {
-		if (ascend) {
-			for (j = 0; j < array_length - 1; j++) {
-				if (data[i+1] > data[i+1]) {
-					return FALSE;
-				}
-			}	
-		}
-	}
-	return TRUE;
-}
-
-/* This function populates the array with random numbers generated from 
- * the current time */
-void populateArray(int *data, int array_length){
+void fillRandomData(int *data, int length){
     srand((unsigned)time(NULL));
-    for(int i = 0; i < array_length; i++){
+    for(int i = 0; i < length; i++){
         data[i] = rand();
     }
 }
 
-/* This function prints the input/output array passed in */
-void printArray(int *array) {
-	for(unsigned int i = 0; i < INPUT_ARRAY_LENGTH; i++) {
-        printf("%d\n", array[i]); 
-	}
-}
-
 int main(int argc, char *argv[])
 {
-	double t1 = 0.0;
-	double t2 = 0.0; 		
-    cl_int error_code;
-    cl_uint num_of_platforms = 0;
+    cl_int err;
+    cl_uint numPlatforms = 0;
 	cl_platform_id *platforms = NULL;
 
-    const int length = INPUT_ARRAY_LENGTH;
+    const int length = INPUT_LENGTH;
     const int datasize = length * sizeof(int);
-    int *input_array = NULL;    //input array on host
-    int *output_array = NULL;   //output array on host
-    cl_mem inputBuffer = NULL;  //input array on the device
+    int *input = NULL;    //input array on host
+    int *output = NULL;   //output array on host
+    cl_mem inputBuffer = NULL;  // Input array on the device
 
-	input_array = (int *)malloc(INPUT_ARRAY_LENGTH * sizeof(int));
-	output_array = (int *)malloc(INPUT_ARRAY_LENGTH * sizeof(int));
+    {
+        input = (int *)malloc(INPUT_LENGTH * sizeof(int));
+        output = (int *)malloc(INPUT_LENGTH * sizeof(int));
 
-	memset(input_array, 0, INPUT_ARRAY_LENGTH * sizeof(int));
-	memset(output_array, 0, INPUT_ARRAY_LENGTH * sizeof(int));
-	populateArray(input_array, length);
+        memset(input, 0, INPUT_LENGTH * sizeof(int));
+        memset(output, 0, INPUT_LENGTH * sizeof(int));
+        fillRandomData(input, length);
+    }
 
-	error_code = clGetPlatformIDs(0, NULL, &num_of_platforms);
-	
-    if (error_code == CL_SUCCESS) {
-	    assert(error_code == CL_SUCCESS);\
+	// Use clGetPlatformIDs() to retrieve the number of platforms
+	err = clGetPlatformIDs(0, NULL, &numPlatforms);
+    if (err == CL_SUCCESS) {
+	    assert(err == CL_SUCCESS);
+    }
+    else if (err == CL_DEVICE_NOT_FOUND) {
+		printf("CL_DEVICE_NOT_FOUND\n");
+	}
+	else if (err == CL_INVALID_PLATFORM) {
+		printf("CL_INVALID_PLATFORM\n");
+	}
+	else if (err == -31) {
+		printf("CL_INVALID_DEVICE_TYPE\n");			
+	} 
+	else if (err == -30) {
+		printf("CL_INVALID_VALUE\n");
+	} 	
+	else if (err == -1001) {
+		printf("CL_PLATFORM_NOT_FOUND_KHR\n");
 	}
 	else {
-		printf("Error. error_code: %d\n", error_code);
+		printf("some other error aapparently\n");
+		printf("%d",err);
 	}
 	
-    if (num_of_platforms > 0) {
-        assert(num_of_platforms);
-        printf("Found %d platform(s)\n", num_of_platforms);
+    if (numPlatforms > 0) {
+        assert(numPlatforms > 0);
     }
-    else {
-		printf("No platform found\n");
-	}
-    
+    printf("found %d platforms.\n", numPlatforms);
 
 	// Allocate enough space for each platform
-	platforms =	(cl_platform_id*)malloc(num_of_platforms*sizeof(cl_platform_id));
+	platforms =	(cl_platform_id*)malloc(numPlatforms*sizeof(cl_platform_id));
     if (platforms != NULL) {	
-        assert(platforms);
+        assert(platforms != NULL);
     }
 
     // Fill in platforms with clGetPlatformIDs()
-	error_code = clGetPlatformIDs(num_of_platforms, platforms, NULL);
-    if (error_code == CL_SUCCESS) {
-	    assert(error_code == CL_SUCCESS);
-	    printf("Platforms asserted successfully\n");
+	err = clGetPlatformIDs(numPlatforms, platforms, NULL);
+    if (err == CL_SUCCESS) {
+	    assert(err == CL_SUCCESS);
     }
 
 
@@ -130,27 +114,28 @@ int main(int argc, char *argv[])
 
 	// Use clGetDeviceIDs() to retrieve the number of
 	// devices present
-	error_code = clGetDeviceIDs(platforms[0],
+	err = clGetDeviceIDs(platforms[0],
                          CL_DEVICE_TYPE_GPU,     //only get GPU
                          0,
                          NULL,
                          &numDevices);
     if(numDevices > 0){
-        printf("Found %d GPUs for platform 0 \n", numDevices);
+        printf("found %d GPUs for platform 0 \n", numDevices);
+        printf("erm here?");
     }else{
-        error_code = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU,
+        err = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU,
                                 0, NULL, &numDevices);
         if(numDevices > 0){
-            printf("Found %d GPUs for platform 0 \n", numDevices);
+            printf("found %d CPUs for platform 0 \n", numDevices);
             printf("wtf opencl");
         }else{
-            printf("can't find GPU or GPU devices\n");
+            printf("can't find CPU or GPU devices\n");
             exit(-1);
         }
     }
 
-    if (error_code == CL_SUCCESS) {
-	    assert(error_code == CL_SUCCESS);
+    if (err == CL_SUCCESS) {
+	    assert(err == CL_SUCCESS);
     }
 
 	// Allocate enough space for each device
@@ -160,21 +145,21 @@ int main(int argc, char *argv[])
     }	
     
 
-    error_code = clGetDeviceIDs(
+    err = clGetDeviceIDs(
 		platforms[0],
 		CL_DEVICE_TYPE_GPU,
 		numDevices,
 		devices,
 		NULL);
-	clCheckEqWithMsg(error_code, CL_SUCCESS, "can't get devices.");
+	clCheckEqWithMsg(err, CL_SUCCESS, "can't get devices.");
 
     //-----------------------------------------------------
 	// Create a context
 	//-----------------------------------------------------
 	cl_context ctx = NULL;
 
-	ctx = clCreateContext(NULL, numDevices, devices, NULL, NULL, &error_code);
-	clCheckEqWithMsg(error_code, CL_SUCCESS, "Can't create context.");
+	ctx = clCreateContext(NULL, numDevices, devices, NULL, NULL, &err);
+	clCheckEqWithMsg(err, CL_SUCCESS, "Can't create context.");
 
 	//-----------------------------------------------------
 	// Create a command queue
@@ -182,23 +167,23 @@ int main(int argc, char *argv[])
 
 	cl_command_queue queue;
 
-	queue = clCreateCommandQueue(ctx, devices[0], 0, &error_code);
-	clCheckEqWithMsg(error_code, CL_SUCCESS, "Can't create command queue..");
+	queue = clCreateCommandQueue(ctx, devices[0], 0, &err);
+	clCheckEqWithMsg(err, CL_SUCCESS, "Can't create command queue..");
 
 	//-----------------------------------------------------
 	// Create device buffers
 	//-----------------------------------------------------
 	inputBuffer = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
-                                 datasize, NULL, &error_code);
-    clCheckEqWithMsg(error_code, CL_SUCCESS, "can't create device buffer...\n");
+                                 datasize, NULL, &err);
+    clCheckEqWithMsg(err, CL_SUCCESS, "can't create device buffer...\n");
 	//-----------------------------------------------------
 	// Write host data to device buffers
 	//-----------------------------------------------------
-	error_code = clEnqueueWriteBuffer(queue, inputBuffer, CL_FALSE, 0,
-                               datasize, input_array, 0, NULL, NULL);
-    clCheckEqWithMsg(error_code, CL_SUCCESS, "can't write host data to device buffer.\n");
+	err = clEnqueueWriteBuffer(queue, inputBuffer, CL_FALSE, 0,
+                               datasize, input, 0, NULL, NULL);
+    clCheckEqWithMsg(err, CL_SUCCESS, "can't write host data to device buffer.\n");
 	//-----------------------------------------------------
-	//Create and compile the program
+	// STEP 7: Create and compile the program
 	//-----------------------------------------------------
 	char *pgmSource = (char *)readFile("bsortKernel.cl");
 
@@ -207,38 +192,41 @@ int main(int argc, char *argv[])
                                                    1,
                                                    (const char**)&pgmSource,
                                                    NULL,
-                                                   &error_code);
-    clCheckEqWithMsg(error_code, CL_SUCCESS, "can't create program..");
+                                                   &err);
+    clCheckEqWithMsg(err, CL_SUCCESS, "can't create program..");
 	// Build (compile) the program for the devices with clBuildProgram()
-	error_code = clBuildProgram(program, numDevices, devices, NULL, NULL, NULL);
-    clCheckEqWithMsg(error_code, CL_SUCCESS, "Can't build program.");
+	err = clBuildProgram(program, numDevices, devices, NULL, NULL, NULL);
+    clCheckEqWithMsg(err, CL_SUCCESS, "Can't build program.");
 	//-----------------------------------------------------
 	// Create the kernel
 	//-----------------------------------------------------
 	cl_kernel kernel = NULL;
 
-	kernel = clCreateKernel(program, "parallelBitonicSort", &error_code);
-	clCheckEqWithMsg(error_code, CL_SUCCESS, "Can't get kernel from program.");
+	kernel = clCreateKernel(program, "parallelBitonicSort", &err);
+	clCheckEqWithMsg(err, CL_SUCCESS, "Can't get kernel from program.");
 	//-----------------------------------------------------
 	// Set the kernel arguments
 	//-----------------------------------------------------
-    error_code = clSetKernelArg(kernel, 0, sizeof(cl_mem),(void*)&inputBuffer);
-    error_code |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&sorting_order);
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem),(void*)&inputBuffer);
+    err |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&sortOrder);
 
-	clCheckEqWithMsg(error_code, CL_SUCCESS, "Can't set kernel's arguments.");
+	clCheckEqWithMsg(err, CL_SUCCESS, "Can't set kernel's arguments.");
+
+	//-----------------------------------------------------
+	// Configure the work-item structure
+	//-----------------------------------------------------
 
 	//-----------------------------------------------------
 	// Enqueue the kernel for execution
 	//-----------------------------------------------------
     cl_uint stages = 0;
-    for(unsigned int i = INPUT_ARRAY_LENGTH; i > 1; i >>= 1){
+    for(unsigned int i = INPUT_LENGTH; i > 1; i >>= 1){
         ++stages;
     }
 
-    size_t globalThreads[1] = {INPUT_ARRAY_LENGTH/2};
+    size_t globalThreads[1] = {INPUT_LENGTH/2};
     size_t threadsPerGroup[1] = {GROUP_SIZE};
-	
-	t1 = getTime();
+
 	for(cl_uint stage = 0; stage < stages; ++stage) {
         clSetKernelArg(kernel, 1, sizeof(cl_uint),(void*)&stage);
 
@@ -246,7 +234,7 @@ int main(int argc, char *argv[])
             clSetKernelArg(kernel, 2, sizeof(cl_uint),(void*)&subStage);
             cl_event exeEvt;
             cl_ulong executionStart, executionEnd;
-            error_code = clEnqueueNDRangeKernel(queue,
+            err = clEnqueueNDRangeKernel(queue,
                                          kernel,
                                          1,
                                          NULL,
@@ -256,8 +244,9 @@ int main(int argc, char *argv[])
                                          NULL,
                                          &exeEvt);
             clWaitForEvents(1, &exeEvt);
-            clCheckEqWithMsg(error_code, CL_SUCCESS, "Kernel execution failure!\n");
+            clCheckEqWithMsg(err, CL_SUCCESS, "Kernel execution failure!\n");
 
+            // let's understand how long it took?
             clGetEventProfilingInfo(exeEvt, CL_PROFILING_COMMAND_START, sizeof(executionStart), &executionStart, NULL);
             clGetEventProfilingInfo(exeEvt, CL_PROFILING_COMMAND_END, sizeof(executionEnd), &executionEnd, NULL);
             clReleaseEvent(exeEvt);
@@ -267,48 +256,50 @@ int main(int argc, char *argv[])
             //printf("Execution of the bitonic sort took %lu.%lu s\n", (executionEnd - executionStart)/1000000000, (executionEnd - executionStart)%1000000000);
         }
     }
-    t2 = getTime();
 
+	//-----------------------------------------------------
 	// Read the output buffer back to the host
+	//-----------------------------------------------------
 	clEnqueueReadBuffer(queue,
                         inputBuffer,
                         CL_TRUE,
                         0,
                         datasize,
-                        output_array,
+                        output,
                         0,
                         NULL,
                         NULL);
 
-	//print the sorted data
-	//printArray(output_array);
-
-	
-	printf("INPUT_ARRAY_LENGTH: %d\n",INPUT_ARRAY_LENGTH);
-	printf("GROUP_SIZE: %d\n",GROUP_SIZE);
-    printf("time: %6.2f secs\n",(t2 - t1));
-    int ret = checkIfArrayIsSorted(output_array, INPUT_ARRAY_LENGTH, sorting_order);
+	// Print the sorted data
+    for(unsigned int i = 0; i < INPUT_LENGTH; i++) {
+         printf("%d\n", output[i]); 
+	}
+	printf("INPUT_LENGTH: %d\n",INPUT_LENGTH);
+    printf("checking result...\n");
+    int ret = checkResult(output, INPUT_LENGTH, sortOrder);
     if (ret == TRUE)
-        printf("data has been sorted :)\n");
+        printf("sort success..\n");
     else
-        printf("data sorting failed :(\n");
-        
- 
-	//release OpenCL resources
+        printf("sort fail...\n");
+	//-----------------------------------------------------
+	// Release OpenCL resources
+	//-----------------------------------------------------
 
-	//free OpenCL resources
+	// Free OpenCL resources
 	clReleaseKernel(kernel);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(queue);
+
 	clReleaseMemObject(inputBuffer);
+
 	clReleaseContext(ctx);
 
-	//free host resources
+	// Free host resources
 	Free(platforms);
 	Free(devices);
 	Free(pgmSource);
-    Free(input_array);
-    Free(output_array);
+    Free(input);
+    Free(output);
 
     return 0;
 }
