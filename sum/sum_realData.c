@@ -8,10 +8,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 //include windowsopencl
+#ifdef __APPLE__
 #include <OpenCL/opencl.h>
+#else
+#include <CL/cl.h>
+#endif
 
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "float.csv"
+#define FILE_NAME "integer.csv"
 #define GPU "GeForce"
 
 int data_size = 0;
@@ -19,14 +23,14 @@ int data_size = 0;
 const char *parallelSum_kernel = "\n" \
 "__kernel void parallelSum(__local float* localSum, __global const float* input, __global float* groupSum) \n" \
 "{                                                                                  \n" \
-"   int localID   = get_local_id(0);                                                \n" \
-"   int globalID  = get_global_id(0);                                               \n" \
-"   int groupID = get_group_id(0);                                                 \n" \
-"   int groupSize = get_local_size(0);                                              \n" \
+"   uint localID   = get_local_id(0);                                                \n" \
+"   uint globalID  = get_global_id(0);                                               \n" \
+"   uint groupID = get_group_id(0);                                                 \n" \
+"   uint groupSize = get_local_size(0);                                              \n" \
 "                                                                                   \n" \
 "   localSum[localID] = input[globalID];                                            \n" \
 "                                                                                   \n" \
-"   for(int stride = groupSize / 2; stride > 0; stride /= 2)                      \n" \
+"   for(uint stride = groupSize / 2; stride > 0; stride /= 2)                      \n" \
 "   {                                                                               \n" \
 "      //wait for all local memory to get to this point and have their localSum[localID]              \n" \
 "      //available. This is so that we can add the current element + stride element                   \n" \
@@ -105,12 +109,18 @@ float seq_average(float* data)
 
 int main (int argc, char** argv)
 {
+  //count how many entries are there
   data_size = countDataEntries();
 
   printf("Count: %d \n",data_size);
 
-  float data[data_size];
-  float results[data_size];
+  //float data[data_size];
+  float* data;
+  data = malloc(data_size * sizeof(float));
+  if(data == NULL)
+  {
+    printf("failed to malloc results \n");
+  }
 
 	storeDataToProcess(data);
   //testPrintData(data);
@@ -118,7 +128,7 @@ int main (int argc, char** argv)
   float average = 0.0;
   average = seq_average(data);
 
-  printf("sequential avg = %lf \n", average);
+  printf("sequential avg = %f \n", average);
   //DONE SEQUENTIAL--
 
   //START OPENCL CALCULATIONs
@@ -130,6 +140,23 @@ int main (int argc, char** argv)
   size_t WG_SIZE = WORK_GROUP_SIZE;
   size_t valueSize;
 
+  if((data_size % WORK_GROUP_SIZE) != 0)
+  {
+    printf("data size is not divisible by workgroupsize. Datasize is : %d, workgroupsize %zu \n", data_size, WG_SIZE);
+    exit(1);
+  }
+
+  int numberOfWorkGroup = data_size/WORK_GROUP_SIZE;
+  printf("datasize: %d, workgroup: %zu, numberofworkgroup: %d \n", data_size, WG_SIZE, numberOfWorkGroup);
+  
+  //holder for results from each workgroup
+  //float results[numberOfWorkGroup];
+  float* results;
+  results = malloc(numberOfWorkGroup * sizeof(float));
+  if(results == NULL)
+  {
+    printf("failed to malloc results \n");
+  }
 
   cl_device_id devices;
   error = clGetDeviceIDs(NULL, CL_DEVICE_TYPE_GPU, 1, &devices, NULL);
@@ -181,7 +208,7 @@ int main (int argc, char** argv)
   }
 
   cl_mem input = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * data_size, NULL, NULL);
-  cl_mem output = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * data_size, NULL, NULL);
+  cl_mem output = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * numberOfWorkGroup, NULL, NULL);
 
   if(!input || !output)
   {
@@ -190,6 +217,7 @@ int main (int argc, char** argv)
   }
 
   error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(float) * data_size, data, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0, sizeof(float) * numberOfWorkGroup, results, 0, NULL, NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -199,7 +227,7 @@ int main (int argc, char** argv)
 
   //set kernel arguments
   error = 0;
-  error = clSetKernelArg(kernel, 0, sizeof(unsigned int) * data_size, NULL);
+  error = clSetKernelArg(kernel, 0, sizeof(float) * data_size, NULL);
   error |= clSetKernelArg(kernel,1, sizeof(cl_mem), (void *)&input);
   error |= clSetKernelArg(kernel,2, sizeof(cl_mem), (void *)&output);
 
@@ -209,15 +237,23 @@ int main (int argc, char** argv)
     exit(1);
   }
 
+  //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
   error = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &WG_SIZE, 0, NULL, NULL);
-  if(error)
+  if(error != CL_SUCCESS)
   {
     printf("failed to exe kernel %d \n", error);
     exit(1);
   }
 
   clFinish(commands);
+
+  error = clEnqueueReadBuffer(commands, output, CL_TRUE, 0, sizeof(float) * numberOfWorkGroup, results, 0, NULL, NULL);
+  if(error)
+  {
+    printf("failed to read results \n");
+    exit(1);
+  }
 
   clReleaseMemObject(input);
   clReleaseMemObject(output);
