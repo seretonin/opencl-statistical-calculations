@@ -1,4 +1,4 @@
-//hi
+//hi2
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,13 +15,11 @@
 #endif
 
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "integer.csv"
+#define FILE_NAME "randomdata.csv"
 #define GPU "GeForce"
 
-int data_size = 0;
-
 const char *parallelSum_kernel = "\n" \
-"__kernel void parallelSum(__local float* localSum, __global const float* input, __global float* groupSum) \n" \
+"__kernel void parallelSum(__global const double* input, __global double* groupSum, __local double* localSum) \n" \
 "{                                                                                  \n" \
 "   uint localID   = get_local_id(0);                                                \n" \
 "   uint globalID  = get_global_id(0);                                               \n" \
@@ -48,35 +46,25 @@ const char *parallelSum_kernel = "\n" \
 "}                                                                                  \n" \
 "\n";
 
-// void readGPUResult(float* results)
-// {
-//   int i;
-//   float sumOfWorkSums = 0.0;
-//   for(i = 0; i < data_size/WORK_GROUP_SIZE; i++)
-//   {
-//     sumOfWorkSums += results[i];
-//   }
-//   printf("actual: %lf, GPU: %lf \n", precount, sumOfWorkSums);
-// }
 
 int countDataEntries()
 {
   FILE *file = fopen(FILE_NAME, "r");
-  float num;
+  double num;
   int count = 0;
-  while(fscanf(file, "%f", &num) > 0)
+  while(fscanf(file, "%lf", &num) > 0)
   {
     count++;
   }
   return count;
 }
 
-void storeDataToProcess(float* data)
+void storeDataToProcess(double* data)
 {
 	FILE *file = fopen(FILE_NAME, "r");
-	float num;
+	double num;
   int i = 0;
-	while(fscanf(file, "%f" ,&num) > 0)
+	while(fscanf(file, "%lf" ,&num) > 0)
 	{
 		data[i] = num;
     i++;
@@ -84,25 +72,25 @@ void storeDataToProcess(float* data)
 	fclose(file);
 }
 
-void testPrintData(float* data)
+void testPrintData(double* data, int data_size)
 {
   int i;
   for(i=1; i < data_size + 1; i++)
   {
-    printf("%d : %f \n", i, data[i-1]);
+    printf("%d : %lf \n", i, data[i-1]);
   }
 }
 
-float seq_average(float* data)
+double seq_average(double* data, int data_size)
 {
   int i;
-  float accumulate = 0;
+  double accumulate = 0;
   //START MEASUREMENT HERE
   for(i = 0; i < data_size + 1; i++)
   {
     accumulate += data[i];
   }
-  printf("sum : %f \n", accumulate);
+  printf("sum : %lf \n", accumulate);
   //STOP MEASUREMENT HERE
   return accumulate/data_size;
 }
@@ -110,52 +98,59 @@ float seq_average(float* data)
 int main (int argc, char** argv)
 {
   //count how many entries are there
+  double* data;
+  double* results;
+
+  int data_size; 
   data_size = countDataEntries();
 
   printf("Count: %d \n",data_size);
 
-  //float data[data_size];
-  float* data;
-  data = malloc(data_size * sizeof(float));
+  //double data[data_size];
+  data = malloc(data_size *sizeof(double));
   if(data == NULL)
   {
     printf("failed to malloc results \n");
   }
 
 	storeDataToProcess(data);
-  //testPrintData(data);
+  //testPrintData(data, data_size);
 
-  float average = 0.0;
-  average = seq_average(data);
+  double average = 0.0;
+  average = seq_average(data,data_size);
 
-  printf("sequential avg = %f \n", average);
+  printf("sequential avg = %lf \n", average);
   //DONE SEQUENTIAL--
 
   //START OPENCL CALCULATIONs
   int error;
 
-  size_t global = data_size;
+  size_t globalSize = data_size;
+  size_t localSize = WORK_GROUP_SIZE;
 
-  //size_t WG_SIZE = WORK_GROUP_SIZE;
-  size_t WG_SIZE = WORK_GROUP_SIZE;
-  size_t valueSize;
-
-  if((data_size % WORK_GROUP_SIZE) != 0)
+  if((data_size % localSize) != 0)
   {
-    printf("data size is not divisible by workgroupsize. Datasize is : %d, workgroupsize %zu \n", data_size, WG_SIZE);
+    printf("data size is not divisible by workgroup size. Datasize is : %d, workgroup size: %d \n", data_size, WORK_GROUP_SIZE);
     exit(1);
   }
 
-  int numberOfWorkGroup = data_size/WORK_GROUP_SIZE;
-  printf("datasize: %d, workgroup: %zu, numberofworkgroup: %d \n", data_size, WG_SIZE, numberOfWorkGroup);
+  int numberOfWorkGroup = data_size/localSize;
+
+  printf("datasize: %d, workgroup: %d, numberofworkgroup: %d \n", data_size, WORK_GROUP_SIZE, numberOfWorkGroup);
   
   //holder for results from each workgroup
-  //float results[numberOfWorkGroup];
-  float* results;
-  results = malloc(numberOfWorkGroup * sizeof(float));
+  //double results[numberOfWorkGroup];
+  results = malloc(numberOfWorkGroup*sizeof(double));
   if(results == NULL)
   {
     printf("failed to malloc results \n");
+  }
+
+  //initilise result array to 0
+  int i = 0;
+  for(i = 0; i < numberOfWorkGroup; i++)
+  {
+    results[i] = 0.0;
   }
 
   cl_device_id devices;
@@ -168,7 +163,7 @@ int main (int argc, char** argv)
   }
 
   //create a compute context with a gpu
-  cl_context context = clCreateContext(0, 1, &devices, NULL, NULL, &error);
+  cl_context context = clCreateContext(NULL, 1, &devices, NULL, NULL, &error);
   if(!context)
   {
     printf("failed to create a context");
@@ -196,9 +191,13 @@ int main (int argc, char** argv)
   {
     size_t len;
     char buffer[2048];
-    printf("failed to build program");
+ 
+    printf("Error: Failed to build program executable!\n");
+    clGetProgramBuildInfo(program, devices, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+    printf("%s\n", buffer);
     exit(1);
   }
+
 
   cl_kernel kernel = clCreateKernel(program, "parallelSum", &error);
   if(!kernel || error != CL_SUCCESS)
@@ -207,8 +206,9 @@ int main (int argc, char** argv)
     exit(1);
   }
 
-  cl_mem input = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * data_size, NULL, NULL);
-  cl_mem output = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * numberOfWorkGroup, NULL, NULL);
+
+  cl_mem input = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
+  cl_mem output = clCreateBuffer(context, CL_MEM_READ_ONLY, numberOfWorkGroup*sizeof(double), NULL, NULL);
 
   if(!input || !output)
   {
@@ -216,8 +216,8 @@ int main (int argc, char** argv)
     exit(1);
   }
 
-  error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(float) * data_size, data, 0, NULL, NULL);
-  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0, sizeof(float) * numberOfWorkGroup, results, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(double) * data_size, data, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0, sizeof(double) * numberOfWorkGroup, results, 0, NULL, NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -225,11 +225,12 @@ int main (int argc, char** argv)
     exit(1);
   }
 
+
   //set kernel arguments
   error = 0;
-  error = clSetKernelArg(kernel, 0, sizeof(float) * data_size, NULL);
-  error |= clSetKernelArg(kernel,1, sizeof(cl_mem), (void *)&input);
-  error |= clSetKernelArg(kernel,2, sizeof(cl_mem), (void *)&output);
+  error = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+  error |= clSetKernelArg(kernel,1, sizeof(cl_mem), &output);
+  error |= clSetKernelArg(kernel,2, localSize*sizeof(double), NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -239,7 +240,7 @@ int main (int argc, char** argv)
 
   //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
-  error = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &global, &WG_SIZE, 0, NULL, NULL);
+  error = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
   {
     printf("failed to exe kernel %d \n", error);
@@ -248,12 +249,25 @@ int main (int argc, char** argv)
 
   clFinish(commands);
 
-  error = clEnqueueReadBuffer(commands, output, CL_TRUE, 0, sizeof(float) * numberOfWorkGroup, results, 0, NULL, NULL);
+  error = clEnqueueReadBuffer(commands, output, CL_TRUE, 0, sizeof(double)*numberOfWorkGroup, results, 0, NULL, NULL);
   if(error)
   {
     printf("failed to read results \n");
     exit(1);
   }
+
+
+  //Read the results from GPU
+  double resultsFromGPU = 0;
+
+  for(i = 0; i < numberOfWorkGroup; i++)
+  {
+    resultsFromGPU += results[i];
+  }
+
+  printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
+  printf("AVG :Results from GPU is %lf \n", resultsFromGPU/data_size);
+
 
   clReleaseMemObject(input);
   clReleaseMemObject(output);
