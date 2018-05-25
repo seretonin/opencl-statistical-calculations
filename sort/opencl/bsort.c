@@ -6,18 +6,26 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <fcntl.h>
+#include <math.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 //to suppress warnings on deprecated APIs
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #define GROUP_SIZE 256
-
+#define FILE_NAME "integer.csv"
 #include <CL/cl.h>
 #include "util.h"
 #include "clutil.h"
-const unsigned int INPUT_LENGTH = 1<<16;
 
 //descending order = 0
 //ascending order = 1
-const cl_uint sort_order = 1; 
+const cl_uint sort_order = 1;
+//load data from file = 1
+//generate random data = 0 
+int load_file = 1;
+unsigned int INPUT_LENGTH = 1<<16;
 
 int checkResult(int *data, int length, int ascend){
     if (ascend == TRUE){
@@ -43,6 +51,48 @@ void fillRandomData(int *data, int length){
     }
 }
 
+int countDataEntries()
+{
+	FILE *file = fopen(FILE_NAME, "r");
+	int count = 0;
+
+	while(!feof(file))
+	{
+	  char ch = fgetc(file);
+	  if(ch == '\n')
+	  {
+		count++;
+	  }
+	}
+	
+	printf("# of elements: %d\n",count);
+	return count;
+}
+
+void storeDataToProcess(int* data)
+{
+	printf("here_1\n");
+	FILE *file = fopen(FILE_NAME, "r");
+	int i = 0;
+	int c;
+	
+	if (file == NULL) {
+		printf("file failed to load\n");
+		exit(1);
+	}
+	else {
+		while(1) {
+			c = fgetc(file);
+			if (feof(file)) {
+				break;
+			}
+		printf("%c",c);
+		//data[i] = atoi(c);
+		}
+	} 
+	
+}
+
 double getTime(){
 	
   struct timeval t;
@@ -65,8 +115,7 @@ int main(int argc, char *argv[])
     cl_uint numPlatforms = 0;
 	cl_platform_id *platforms = NULL;
 
-    const int length = INPUT_LENGTH;
-    const int datasize = length * sizeof(int);
+    int length;
     int *input = NULL;    //input array on host
     int *output = NULL;   //output array on host
     cl_mem inputBuffer = NULL;  //input array on the device
@@ -76,35 +125,22 @@ int main(int argc, char *argv[])
 
 	memset(input, 0, INPUT_LENGTH * sizeof(int));
 	memset(output, 0, INPUT_LENGTH * sizeof(int));
-	fillRandomData(input, length);
-
-
-	//retrieve # of platforms
-	err = clGetPlatformIDs(0, NULL, &numPlatforms);
-    if (err == CL_SUCCESS) {
-	    assert(err == CL_SUCCESS);
-    }
-    else if (err == CL_DEVICE_NOT_FOUND) {
-		printf("CL_DEVICE_NOT_FOUND\n");
-	}
-	else if (err == CL_INVALID_PLATFORM) {
-		printf("CL_INVALID_PLATFORM\n");
-	}
-	else if (err == -31) {
-		printf("CL_INVALID_DEVICE_TYPE\n");			
-	} 
-	else if (err == -30) {
-		printf("CL_INVALID_VALUE\n");
-	} 	
-	else if (err == -1001) {
-		printf("CL_PLATFORM_NOT_FOUND_KHR\n");
+	
+	if (load_file == 0) {
+		length = INPUT_LENGTH;
+		fillRandomData(input, length);
 	}
 	else {
-		printf("some other error aapparently\n");
-		printf("%d",err);
+		length = countDataEntries();
+		storeDataToProcess(input);
+		
 	}
-	
-    if (numPlatforms > 0) {
+	const int datasize = length * sizeof(int);
+	//retrieve # of platforms
+	err = clGetPlatformIDs(0, NULL, &numPlatforms);
+    assert(err == CL_SUCCESS);
+
+	    if (numPlatforms > 0) {
         assert(numPlatforms > 0);
     }
     printf("found %d platforms.\n", numPlatforms);
@@ -245,7 +281,6 @@ int main(int argc, char *argv[])
 
 		}
     }
-	t2 = getTime();
 	
 	//read the output buffer back to the host
 	clEnqueueReadBuffer(queue,
@@ -258,6 +293,11 @@ int main(int argc, char *argv[])
                         NULL,
                         NULL);
 
+	int median = output[INPUT_LENGTH/2];
+	int min = output[0];
+	int max = output[INPUT_LENGTH-1];
+	t2 = getTime();
+	
 	//print the sorted data
     for(unsigned int i = 0; i < INPUT_LENGTH; i++) {
         printf("%d\t", output[i]); 
@@ -270,9 +310,9 @@ int main(int argc, char *argv[])
     if (ret == TRUE) {
 		printf("\n-----------------------------------------\n");
 		printf("INPUT_LENGTH : %d\n",INPUT_LENGTH);
-		printf("median       : %d\n",output[INPUT_LENGTH/2]);
-		printf("min          : %d\n", output[0]);
-		printf("max          : %d\n", output[INPUT_LENGTH-1]);
+		printf("median       : %d\n",median);
+		printf("min          : %d\n",min);
+		printf("max          : %d\n",max);
 		printf("time taken   : %6.5f secs\n",(t2 - t1));		
 		printf("-------------------------------------------\n");		
 	}							
