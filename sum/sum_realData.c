@@ -259,6 +259,7 @@ int main (int argc, char** argv)
 
   //Read the results from GPU
   double resultsFromGPU = 0;
+  double averageFromGPU = 0;
 
   for(i = 0; i < numberOfWorkGroup; i++)
   {
@@ -266,7 +267,10 @@ int main (int argc, char** argv)
   }
 
   printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
-  printf("AVG :Results from GPU is %lf \n", resultsFromGPU/data_size);
+
+  averageFromGPU = resultsFromGPU / data_size;
+  
+  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
 
 
   clReleaseMemObject(input);
