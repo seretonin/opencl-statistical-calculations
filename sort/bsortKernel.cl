@@ -1,4 +1,3 @@
-#define GROUP_SIZE 256
 #define CHALLENGE_LEN 32
 
 typedef struct entry_s{
@@ -6,9 +5,6 @@ typedef struct entry_s{
     int  idx;
 }entry_t;
 
-/*
- * compare tow string
- */
 int compare(char *p1, char *p2, int len)
 {
     for(int i = 0; i < len; i++)
@@ -25,7 +21,7 @@ int compare(char *p1, char *p2, int len)
 }
 
 __kernel
-void parallelBitonicSort(__global uint * data,
+void parallelBitonicSort(__global float * data,
                          const uint stage,
                          const uint subStage,
                          const uint direction) {
@@ -40,16 +36,16 @@ void parallelBitonicSort(__global uint * data,
 
     uint rightId = leftId + distanceBetweenPairs;
 
-    uint leftElement = data[leftId];
-    uint rightElement = data[rightId];
+    float leftElement = data[leftId];
+    float rightElement = data[rightId];
 
     uint sameDirectionBlockWidth = 1 << stage;
 
     if((threadId/sameDirectionBlockWidth) % 2 == 1)
         sortIncreasing = 1 - sortIncreasing;
 
-    uint greater;
-    uint lesser;
+    float greater;
+    float lesser;
     if(leftElement > rightElement) {
         greater = leftElement;
         lesser  = rightElement;
