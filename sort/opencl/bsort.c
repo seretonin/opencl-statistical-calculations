@@ -6,28 +6,25 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include <fcntl.h>
-#include <math.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#define GROUP_SIZE 256
+#define FILE_NAME "dataset_1M.txt"
+//#define FILE_NAME "dataset_5M.txt"
+//#define FILE_NAME "dataset_10M.txt"
+//#define FILE_NAME "dataset_25M.txt"
+//#define FILE_NAME "dataset_50M.txt"
+//#define FILE_NAME "dataset_100M.txt"
 //to suppress warnings on deprecated APIs
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
-#define GROUP_SIZE 256
-#define FILE_NAME "integer.csv"
 #include <CL/cl.h>
 #include "util.h"
 #include "clutil.h"
 
-//descending order = 0
-//ascending order = 1
-const cl_uint sort_order = 1;
-//load data from file = 1
-//generate random data = 0 
-int load_file = 1;
-unsigned int INPUT_LENGTH = 1<<16;
+int ascending_order = 1;
+int load_file = 0;
+unsigned int INPUT_LENGTH = 1<<18;
 
-int checkResult(int *data, int length, int ascend){
+
+int checkResult(double *data, int length, int ascend){
     if (ascend == TRUE){
         for(int i = 0; i < length-1; i++){
             if(data[i] > data[i+1]){
@@ -44,13 +41,16 @@ int checkResult(int *data, int length, int ascend){
     return TRUE;
 }
 
-void fillRandomData(int *data, int length){
-    srand((unsigned)time(NULL));
-    for(int i = 0; i < length; i++){
-        data[i] = rand();
-    }
+void fillRandomData(double *data, int length){
+	srand(time(NULL));
+	for(int i = 0; i < length; i++)
+	{
+		double fnum = ((double)rand() / RAND_MAX) * 200 + (rand()/rand() * 2) * 1000;
+		data[i] = fnum;
+		//printf("%f \n", fnum);
+	}
 }
-
+	
 int countDataEntries()
 {
 	FILE *file = fopen(FILE_NAME, "r");
@@ -64,32 +64,24 @@ int countDataEntries()
 		count++;
 	  }
 	}
-	
-	printf("# of elements: %d\n",count);
 	return count;
 }
 
-void storeDataToProcess(int* data)
+void storeDataToProcess(double *data)
 {
-	printf("here_1\n");
+
 	FILE *file = fopen(FILE_NAME, "r");
+	double num, numcpy;
 	int i = 0;
-	int c;
-	
-	if (file == NULL) {
-		printf("file failed to load\n");
-		exit(1);
+	while(fscanf(file, "%lf" ,&num) > 0)
+	{
+		numcpy = num;
+		data[i] = numcpy;
+		printf("%lf | %d\n", numcpy,i);
+		i++;
 	}
-	else {
-		while(1) {
-			c = fgetc(file);
-			if (feof(file)) {
-				break;
-			}
-		printf("%c",c);
-		//data[i] = atoi(c);
-		}
-	} 
+	printf("reading and storing of data was a success u did well\n");
+	fclose(file);
 	
 }
 
@@ -110,37 +102,45 @@ double getTime(){
 int main(int argc, char *argv[])
 {
 	double t1 = 0.0;
-	double t2 = 0.0; 		
+	double t2 = 0.0; 
+	double median, min, max = 0.0;	
     cl_int err;
     cl_uint numPlatforms = 0;
 	cl_platform_id *platforms = NULL;
 
-    int length;
-    int *input = NULL;    //input array on host
-    int *output = NULL;   //output array on host
+	int length;
+	if (load_file == 1) {
+		length = countDataEntries();
+	}
+	else if (load_file == 0) {
+		length = INPUT_LENGTH;
+	}
+			
+    const int datasize = length * sizeof(double);
+    double *input = NULL;    //input array on host
+    double *output = NULL;   //output array on host
     cl_mem inputBuffer = NULL;  //input array on the device
 
-	input = (int *)malloc(INPUT_LENGTH * sizeof(int));
-	output = (int *)malloc(INPUT_LENGTH * sizeof(int));
+	input = (double *)malloc(length * sizeof(double));
+	output = (double *)malloc(length * sizeof(double));
 
-	memset(input, 0, INPUT_LENGTH * sizeof(int));
-	memset(output, 0, INPUT_LENGTH * sizeof(int));
+	memset(input, 0, length * sizeof(double));
+	memset(output, 0, length * sizeof(double));
 	
-	if (load_file == 0) {
-		length = INPUT_LENGTH;
+	if (load_file == 1) {
+		storeDataToProcess(input);
+	}
+	else if (load_file == 0) {
 		fillRandomData(input, length);
 	}
-	else {
-		length = countDataEntries();
-		storeDataToProcess(input);
-		
-	}
-	const int datasize = length * sizeof(int);
+
 	//retrieve # of platforms
 	err = clGetPlatformIDs(0, NULL, &numPlatforms);
-    assert(err == CL_SUCCESS);
+    if (err == CL_SUCCESS) {
+	    assert(err == CL_SUCCESS);
+    }
 
-	    if (numPlatforms > 0) {
+    if (numPlatforms > 0) {
         assert(numPlatforms > 0);
     }
     printf("found %d platforms.\n", numPlatforms);
@@ -188,14 +188,12 @@ int main(int argc, char *argv[])
     if (devices != NULL) {
         assert(devices);
     }	
-    
 
-    err = clGetDeviceIDs(
-		platforms[0],
-		CL_DEVICE_TYPE_GPU,
-		numDevices,
-		devices,
-		NULL);
+    err = clGetDeviceIDs(platforms[0],
+						CL_DEVICE_TYPE_GPU,
+						numDevices,
+						devices,
+						NULL);
 	clCheckEqWithMsg(err, CL_SUCCESS, "can't get devices.");
 
 
@@ -245,7 +243,7 @@ int main(int argc, char *argv[])
 	
 	//set the kernel arguments
     err = clSetKernelArg(kernel, 0, sizeof(cl_mem),(void*)&inputBuffer);
-    err |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&sort_order);
+    err |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&ascending_order);
 
 	clCheckEqWithMsg(err, CL_SUCCESS, "Can't set kernel's arguments.");
 
@@ -281,6 +279,7 @@ int main(int argc, char *argv[])
 
 		}
     }
+	t2 = getTime();
 	
 	//read the output buffer back to the host
 	clEnqueueReadBuffer(queue,
@@ -293,27 +292,42 @@ int main(int argc, char *argv[])
                         NULL,
                         NULL);
 
-	int median = output[INPUT_LENGTH/2];
-	int min = output[0];
-	int max = output[INPUT_LENGTH-1];
-	t2 = getTime();
+	//calculate the statistical values
 	
+	median = output[length/2];
+	min = output[0];
+	max = output[length-1];
+
 	//print the sorted data
-    for(unsigned int i = 0; i < INPUT_LENGTH; i++) {
-        printf("%d\t", output[i]); 
-        if (i%5 == 0) {
+	/*for(unsigned int i = 0; i < length; i++) {
+		printf("%f\t\t\t\t", input[i]); 
+		if (i%3 == 0) {
 			printf("\n");
-		} 
+		}
 	}
 	
-    int ret = checkResult(output, INPUT_LENGTH, sort_order);
+	//print the sorted data
+	for(unsigned int i = 0; i < length; i++) {
+		printf("%f\t\t\t\t", output[i]); 
+		if (i%3 == 0) {
+			printf("\n");
+		}
+	}*/
+	
+    int ret = checkResult(output, INPUT_LENGTH, ascending_order);
     if (ret == TRUE) {
 		printf("\n-----------------------------------------\n");
-		printf("INPUT_LENGTH : %d\n",INPUT_LENGTH);
-		printf("median       : %d\n",median);
-		printf("min          : %d\n",min);
-		printf("max          : %d\n",max);
-		printf("time taken   : %6.5f secs\n",(t2 - t1));		
+		if (load_file == 1) {
+			printf("dataset        : %s\n",FILE_NAME);
+		}
+		else {
+			printf("dataset        : randomly generated\n");
+		}
+		printf("number of data : %d\n",length);
+		printf("median         : %lf\n",median);
+		printf("min            : %lf\n",min);
+		printf("max            : %lf\n",max);
+		printf("time taken     : %6.5f secs\n",(t2 - t1));		
 		printf("-------------------------------------------\n");		
 	}							
     else {

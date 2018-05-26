@@ -2,7 +2,7 @@ CC = gcc
 AR = ar
 RANLIB = ranlib
 
-CFLAGS = -g -std=c99
+CFLAGS = -g -Wall -std=c99
 DEBUG = -DDEBUG
 
 OPENCL_INC_PATH = -I/opt/AMDAPPSDK-2.9-1/include
