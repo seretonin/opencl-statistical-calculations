@@ -15,7 +15,7 @@
 #endif
 
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "randomdata.csv"
+#define FILE_NAME "dataset_5M.txt" //<-- I'll give you seg fault if I dont exist !
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -45,6 +45,20 @@ const char *parallelSum_kernel = "\n" \
 "   }                                                                               \n" \
 "}                                                                                  \n" \
 "\n";
+
+double getTime()
+{
+  struct timeval t;
+  double sec, msec;
+
+  while(gettimeofday(&t, NULL) != 0);
+  sec = t.tv_sec;
+  msec = t.tv_usec;
+  sec = sec + msec/1000000.0;
+
+  return sec;
+}
+
 
 
 int countDataEntries()
@@ -83,16 +97,29 @@ void testPrintData(double* data, int data_size)
 
 double seq_average(double* data, int data_size)
 {
-  int i;
-  double accumulate = 0;
-  //START MEASUREMENT HERE
-  for(i = 0; i < data_size + 1; i++)
-  {
-    accumulate += data[i];
-  }
-  printf("sum : %lf \n", accumulate);
-  //STOP MEASUREMENT HERE
-  return accumulate/data_size;
+  double t1 = 0.0;
+  double t2 = 0.0;
+
+  //START MEASUREMENT FOR SEQUENTIAL SUM / MEAN
+  t1 = getTime();
+
+        int i;
+        double average = 0;
+        double accumulate = 0;
+
+        for(i = 0; i < data_size + 1; i++)
+        {
+          accumulate += data[i];
+        }
+
+        average = accumulate/data_size;
+
+  t2 = getTime();
+  //STOP MEASUREMENT FOR SEQ sum and mean
+  printf("seq sum : %lf \n", accumulate);
+  printf("time taken seq: %6.5f secs \n", (t2-t1));
+
+  return average;
 }
 
 int main (int argc, char** argv)
@@ -122,7 +149,11 @@ int main (int argc, char** argv)
   printf("sequential avg = %lf \n", average);
   //DONE SEQUENTIAL--
 
-  //START OPENCL CALCULATIONs
+ //START OPENCL CALCULATIONs
+  double t1 = 0.0;
+  double t2 = 0.0;
+
+  t1 = getTime();
   int error;
 
   size_t globalSize = data_size;
@@ -271,6 +302,10 @@ int main (int argc, char** argv)
   averageFromGPU = resultsFromGPU / data_size;
   
   printf("AVG :Results from GPU is %lf \n", averageFromGPU);
+
+  t2 = getTime();
+
+  printf("GPU time taken: %6.5f secs \n", (t2-t1));
 
 
   clReleaseMemObject(input);
