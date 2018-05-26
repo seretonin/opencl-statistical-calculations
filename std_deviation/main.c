@@ -16,7 +16,7 @@
 
 #define MAX_SOURCE_SIZE (0x100000)
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "dataset_twos.txt" //<-- I'll give you seg fault if I dont exist !
+#define FILE_NAME "dataset_threes.txt" //<-- I'll give you seg fault if I dont exist !
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -323,25 +323,28 @@ int main (int argc, char** argv)
   //Read the results from GPU
   double resultsFromGPU = 0;
   double averageFromGPU = 0;
+  double std_dev = 0;
 
-  for(i = 0; i < numberOfWorkGroup; i++)
+  for(i = 0; i < numberOfWorkGroup*data_size; i++)
   {
     resultsFromGPU += results[i];
   }
-
-  printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
-
-  averageFromGPU = resultsFromGPU / data_size;
-
-  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
-
-  t2 = getTime();
 
   printf("GPU time taken: %6.5f secs \n", (t2-t1));
 
   for (i = 0; i < data_size; i++) {
     printf("index %d: %lf\n", i, results[i]);
   }
+
+  printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
+
+  averageFromGPU = resultsFromGPU / data_size;
+  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
+
+  std_dev = sqrt(averageFromGPU);
+  printf("standard deviation: %lf\n", std_dev);
+
+  t2 = getTime();
 
 
   clReleaseMemObject(input);

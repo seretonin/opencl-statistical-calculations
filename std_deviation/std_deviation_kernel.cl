@@ -31,6 +31,6 @@ __kernel void std_deviation(__global const double* input, __global double* outpu
 
     printf("global id:%d  local id: %d\n", global_id, local_id);
 
-    output[local_id] = local_sum[local_id] - mean;
+    output[local_id] = (local_sum[local_id] - mean) * (local_sum[local_id] - mean);
     printf("input: %lf  output: %lf\n", local_sum[local_id], output[local_id]);
 }
