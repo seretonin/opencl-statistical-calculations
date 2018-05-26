@@ -7,8 +7,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-//include windowsopencl
+
+#ifdef __APPLE__
 #include <OpenCL/opencl.h>
+#else
+#include <CL/cl.h>
+#endif
 
 #define DATA_SIZE 1024
 #define WORK_GROUP_SIZE 32
@@ -79,8 +83,13 @@ int main (int argc, char** argv)
   printf("precount: %f \n", precount);
 
   //connect to a compute deivce
-  cl_device_id device_id;
-  err = clGetDeviceIDs(NULL,CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
+  cl_platform_id platform_id = NULL;
+  cl_device_id device_id = NULL;   
+  cl_uint ret_num_devices;
+  cl_uint ret_num_platforms;
+  cl_int ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
+  err = clGetDeviceIDs( platform_id, CL_DEVICE_TYPE_ALL, 1, 
+            &device_id, &ret_num_devices);
 
   if(err != CL_SUCCESS)
   {
@@ -172,6 +181,7 @@ int main (int argc, char** argv)
 
   //set the arguments to our compute kernel
   err = 0;
+  printf("size: %d\n", count*sizeof(unsigned int));
   err = clSetKernelArg(kernel, 0, count*sizeof(unsigned int), NULL);
   err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &input);
   err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &output);

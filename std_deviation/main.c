@@ -13,6 +13,7 @@
 #include <CL/cl.h>
 #endif
 
+#define MAX_SOURCE_SIZE (0x100000)
 #define DATA_SIZE 1024
 #define WORK_GROUP_SIZE 32
 
@@ -54,7 +55,7 @@ void GenerateData()
   int i;
   for(i = 0;i < DATA_SIZE; i++)
   {
-    data[i] = 2.12312;
+    data[i] = 1;
     precount += data[i];
   }
 }
@@ -80,6 +81,20 @@ int main (int argc, char** argv)
   //get data
   GenerateData();
   printf("precount: %f \n", precount);
+
+      // Load the kernel source code into the array source_str
+    FILE *fp;
+    char *source_str;
+    size_t source_size;
+
+  fp = fopen("std_deviation_kernel.cl", "r");
+  if (!fp) {
+      fprintf(stderr, "Failed to load kernel.\n");
+      exit(1);
+  }
+  source_str = (char*)malloc(MAX_SOURCE_SIZE);
+  source_size = fread( source_str, 1, MAX_SOURCE_SIZE, fp);
+  fclose( fp );
 
   //connect to a compute deivce
   cl_platform_id platform_id = NULL;
@@ -121,32 +136,37 @@ int main (int argc, char** argv)
   printf("pass 4 \n");
 
 
-  //create compute cl_program
-  cl_program program = clCreateProgramWithSource(context, 1, (const char **)&parallelSum_kernel, NULL, &err);
-  if(!program)
-  {
+  // Create a program from the kernel source
+  cl_program program = clCreateProgramWithSource(context, 1, 
+          (const char **)&source_str, (const size_t *)&source_size, &ret);
+  if (!program) {
     printf("error: failed to create a compute program! \n");
     return EXIT_FAILURE;
   }
 
   printf("pass 5 \n");
 
-  err = clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
+  // Build the program
+  err = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
   if(err != CL_SUCCESS)
   {
+    printf("%d\n", err);
     //only if failed, do this
     size_t len;
-    char buffer[2048];
+    char *buffer;
 
     printf("error: failed to build program executable \n");
-    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
 
+    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
+    buffer = malloc(len);
+    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, len, buffer, NULL);
     printf("%s\n", buffer);
+
     exit(1);
   }
 
   printf("pass X \n");
-  cl_kernel kernel = clCreateKernel(program, "parallelSum", &err);
+  cl_kernel kernel = clCreateKernel(program, "std_deviation", &err);
   if(!kernel || err != CL_SUCCESS)
   {
     printf("error: failed to create compute kernel! \n");
@@ -180,14 +200,19 @@ int main (int argc, char** argv)
 
   //set the arguments to our compute kernel
   err = 0;
+  // printf("size: %d\n", count*sizeof(unsigned int));
+  float mean = 1;
+  //err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &mean);
   err = clSetKernelArg(kernel, 0, count*sizeof(unsigned int), NULL);
   err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &input);
   err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &output);
+  err |= clSetKernelArg(kernel, 3, sizeof(float), &mean);
 
 
   if(err != CL_SUCCESS)
   {
     printf("error: failed to set kernel arguments! %d \n", err);
+
     exit(1);
   }
 
