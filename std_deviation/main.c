@@ -457,29 +457,88 @@ int main (int argc, char** argv)
   }
 
 
-  //Read the std_dev_results from GPU
-  double std_dev_resultsFromGPU = 0;
-  //double averageFromGPU = 0;
-  double std_dev = 0;
+  // //Read the std_dev_results from GPU
+  // double std_dev_resultsFromGPU = 0;
+  // //double averageFromGPU = 0;
+  // double std_dev = 0;
 
-  for(i = 0; i < data_size; i++)
-  {
-    std_dev_resultsFromGPU += std_dev_results[i];
-    //printf("index %d: %lf\n", i, std_dev_results[i]);
-  }
-  //printf("i: %d\n", i);
-
-  // for (i = 0; i < data_size; i++) {
-  //   printf("index %d: %lf\n", i, std_dev_results[i]);
+  // for(i = 0; i < data_size; i++)
+  // {
+  //   std_dev_resultsFromGPU += std_dev_results[i];
+  //   //printf("index %d: %lf\n", i, std_dev_results[i]);
   // }
+  // //printf("i: %d\n", i);
 
-  //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
+  // // for (i = 0; i < data_size; i++) {
+  // //   printf("index %d: %lf\n", i, std_dev_results[i]);
+  // // }
 
-  double variance = std_dev_resultsFromGPU / data_size;
-  printf("VARIANCE: %lf \n", variance);
+  // //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
 
-  std_dev = sqrt(variance);
-  printf("standard deviation: %lf\n", std_dev);
+  // double variance = std_dev_resultsFromGPU / data_size;
+  // printf("VARIANCE: %lf \n", variance);
+
+  // std_dev = sqrt(variance);
+  // printf("standard deviation: %lf\n", std_dev);
+
+
+
+
+
+
+
+  // parallel
+  double* variance_sum_results;
+  variance_sum_results = malloc(numberOfWorkGroup*sizeof(double));
+  if(variance_sum_results == NULL)
+  {
+    printf("failed to malloc variance_sum_results!!! \n");
+  }
+
+  //initilise result array to 0
+  for(i = 0; i < numberOfWorkGroup; i++)
+  {
+    variance_sum_results[i] = 0.0;
+  }
+
+
+  input = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
+  cl_mem var_sum_output = clCreateBuffer(context, CL_MEM_READ_ONLY, numberOfWorkGroup*sizeof(double), NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(double) * data_size, std_dev_results, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, var_sum_output, CL_TRUE, 0,  numberOfWorkGroup*sizeof(double), variance_sum_results, 0, NULL, NULL);
+
+  error = clSetKernelArg(sum_kernel, 0, sizeof(cl_mem), &input);
+  error |= clSetKernelArg(sum_kernel,1, sizeof(cl_mem), &var_sum_output);
+  error |= clSetKernelArg(sum_kernel,2, localSize*sizeof(double), NULL);
+
+  error = clEnqueueNDRangeKernel(commands, sum_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
+  if(error != CL_SUCCESS)
+  {
+    printf("failed to exe sum_kernel %d \n", error);
+    exit(1);
+  }
+
+  clFinish(commands);
+
+  error = clEnqueueReadBuffer(commands, var_sum_output, CL_TRUE, 0, sizeof(double)*numberOfWorkGroup, variance_sum_results, 0, NULL, NULL);
+  if(error)
+  {
+    printf("failed to read sum_results \n");
+    printf("error: %d\n", error);
+    exit(1);
+  }
+
+  double var_sum_final = 0;
+  for(i = 0; i < numberOfWorkGroup; i++)
+  {
+    var_sum_final += variance_sum_results[i];
+    //printf("index %d: %lf\n", i, sum_results[i]);
+  }
+
+  double variance = var_sum_final/data_size;
+  printf("parallel variance: %lf\n", variance);
+  double std_dev = sqrt(variance);
+  printf("parallel std deviation: %lf\n", std_dev);
 
   t2 = getTime();
 
