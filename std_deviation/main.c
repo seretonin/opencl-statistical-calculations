@@ -16,7 +16,7 @@
 
 #define MAX_SOURCE_SIZE (0x100000)
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "dataset_threes.txt" //<-- I'll give you seg fault if I dont exist !
+#define FILE_NAME "256threes.txt" //<-- I'll give you seg fault if I dont exist !
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -109,9 +109,9 @@ double seq_average(double* data, int data_size)
         double average = 0;
         double accumulate = 0;
 
-        for(i = 0; i < data_size + 1; i++)
+        for(i = 0; i < data_size; i++)
         {
-          accumulate += data[i];
+          accumulate += (data[i] - 1) * (data[i] - 1);
         }
 
         average = accumulate/data_size;
@@ -139,7 +139,7 @@ int main (int argc, char** argv)
   data = malloc(data_size *sizeof(double));
   if(data == NULL)
   {
-    printf("failed to malloc results \n");
+    printf("failed to malloc input \n");
   }
 
 	storeDataToProcess(data);
@@ -149,6 +149,7 @@ int main (int argc, char** argv)
   average = seq_average(data,data_size);
 
   printf("sequential avg = %lf \n", average);
+  printf("sequential std_deviation: %lf\n", sqrt(average));
   //DONE SEQUENTIAL--
 
  //START OPENCL CALCULATIONs
@@ -173,10 +174,10 @@ int main (int argc, char** argv)
   
   //holder for results from each workgroup
   //double results[numberOfWorkGroup];
-  results = malloc(data_size*numberOfWorkGroup*sizeof(double));
+  results = malloc(data_size*sizeof(double)*numberOfWorkGroup);
   if(results == NULL)
   {
-    printf("failed to malloc results \n");
+    printf("failed to malloc results!!! \n");
   }
 
   //initilise result array to 0
@@ -277,7 +278,7 @@ int main (int argc, char** argv)
   }
 
   error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(double) * data_size, data, 0, NULL, NULL);
-  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0, data_size*sizeof(double) * numberOfWorkGroup, results, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0,  data_size*numberOfWorkGroup*sizeof(double), results, 0, NULL, NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -325,18 +326,18 @@ int main (int argc, char** argv)
   double averageFromGPU = 0;
   double std_dev = 0;
 
-  for(i = 0; i < numberOfWorkGroup*data_size; i++)
+  for(i = 0; i < data_size; i++)
   {
     resultsFromGPU += results[i];
-  }
-
-  printf("GPU time taken: %6.5f secs \n", (t2-t1));
-
-  for (i = 0; i < data_size; i++) {
     printf("index %d: %lf\n", i, results[i]);
   }
+  //printf("i: %d\n", i);
 
-  printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
+  // for (i = 0; i < data_size; i++) {
+  //   printf("index %d: %lf\n", i, results[i]);
+  // }
+
+  //printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
 
   averageFromGPU = resultsFromGPU / data_size;
   printf("AVG :Results from GPU is %lf \n", averageFromGPU);
@@ -345,6 +346,8 @@ int main (int argc, char** argv)
   printf("standard deviation: %lf\n", std_dev);
 
   t2 = getTime();
+
+  printf("GPU time taken: %6.5f secs \n", (t2-t1));
 
 
   clReleaseMemObject(input);
