@@ -99,11 +99,11 @@ void testPrintData(double* data, int data_size)
 
 double seq_average(double* data, int data_size)
 {
-  double t1 = 0.0;
-  double t2 = 0.0;
+  // double t1 = 0.0;
+  // double t2 = 0.0;
 
-  //START MEASUREMENT FOR SEQUENTIAL SUM / MEAN
-  t1 = getTime();
+  // //START MEASUREMENT FOR SEQUENTIAL SUM / MEAN
+  // t1 = getTime();
 
         int i;
         double average = 0;
@@ -116,10 +116,10 @@ double seq_average(double* data, int data_size)
 
         average = accumulate/data_size;
 
-  t2 = getTime();
+  //t2 = getTime();
   //STOP MEASUREMENT FOR SEQ sum and mean
   printf("seq sum : %lf \n", accumulate);
-  printf("time taken seq: %6.5f secs \n", (t2-t1));
+  //printf("time taken seq: %6.5f secs \n", (t2-t1));
 
   return average;
 }
@@ -164,18 +164,24 @@ int main (int argc, char** argv)
   //testPrintData(data, data_size);
 
   double average = 0.0;
+  double t0 = getTime();
   average = seq_average(data,data_size);
+  double t1 = getTime();
+  printf("time to sequentially calculate avg: %lf\n", t1-t0);
   double seq_std_dev = calculateSequentialStdDev(data, data_size, average);
+  double t2 = getTime();
+  printf("time to sequentially calcualte std dev: %lf\n", t2-t1);
+  printf("total sequential time: %lf\n", t2-t0);
 
   printf("sequential avg = %lf \n", average);
   printf("sequential std_deviation: %lf\n", seq_std_dev);
   //DONE SEQUENTIAL--
 
  //START OPENCL CALCULATIONs
-  double t1 = 0.0;
-  double t2 = 0.0;
+  // double t1 = 0.0;
+  // double t2 = 0.0;
 
-  t1 = getTime();
+  //t1 = getTime();
   int error;
 
   size_t globalSize = data_size;
@@ -360,6 +366,8 @@ int main (int argc, char** argv)
     exit(1);
   }
 
+  t0 = getTime();
+
   //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
   error = clEnqueueNDRangeKernel(commands, sum_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
@@ -370,6 +378,9 @@ int main (int argc, char** argv)
   }
 
   clFinish(commands);
+
+  t1 = getTime();
+  printf("parallel time to calculate mean: %lf\n", t1-t0);
 
   error = clEnqueueReadBuffer(commands, sum_output, CL_TRUE, 0, sizeof(double)*numberOfWorkGroup, sum_results, 0, NULL, NULL);
   if(error)
@@ -437,6 +448,7 @@ int main (int argc, char** argv)
     exit(1);
   }
 
+  t2 = getTime();
   //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
   error = clEnqueueNDRangeKernel(commands, std_dev_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
@@ -448,6 +460,9 @@ int main (int argc, char** argv)
 
   clFinish(commands);
 
+  double t3 = getTime();
+  printf("parallel time to calculate diff from mean: %lf\n", t3-t2);
+
   error = clEnqueueReadBuffer(commands, std_dev_output, CL_TRUE, 0, sizeof(double)*data_size, std_dev_results, 0, NULL, NULL);
   if(error)
   {
@@ -457,37 +472,7 @@ int main (int argc, char** argv)
   }
 
 
-  // //Read the std_dev_results from GPU
-  // double std_dev_resultsFromGPU = 0;
-  // //double averageFromGPU = 0;
-  // double std_dev = 0;
-
-  // for(i = 0; i < data_size; i++)
-  // {
-  //   std_dev_resultsFromGPU += std_dev_results[i];
-  //   //printf("index %d: %lf\n", i, std_dev_results[i]);
-  // }
-  // //printf("i: %d\n", i);
-
-  // // for (i = 0; i < data_size; i++) {
-  // //   printf("index %d: %lf\n", i, std_dev_results[i]);
-  // // }
-
-  // //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
-
-  // double variance = std_dev_resultsFromGPU / data_size;
-  // printf("VARIANCE: %lf \n", variance);
-
-  // std_dev = sqrt(variance);
-  // printf("standard deviation: %lf\n", std_dev);
-
-
-
-
-
-
-
-  // parallel
+  // SUM UP AND CALCULATE VARIANCE IN PARALLEL
   double* variance_sum_results;
   variance_sum_results = malloc(numberOfWorkGroup*sizeof(double));
   if(variance_sum_results == NULL)
@@ -511,6 +496,8 @@ int main (int argc, char** argv)
   error |= clSetKernelArg(sum_kernel,1, sizeof(cl_mem), &var_sum_output);
   error |= clSetKernelArg(sum_kernel,2, localSize*sizeof(double), NULL);
 
+  double t4 = getTime();
+
   error = clEnqueueNDRangeKernel(commands, sum_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
   {
@@ -519,6 +506,11 @@ int main (int argc, char** argv)
   }
 
   clFinish(commands);
+
+  double t5 = getTime();
+  printf("parallel time to calculate sum of difference from mean: %lf\n", t5-t4);
+
+  printf("total time parallel: %lf\n", getTime() - t0);
 
   error = clEnqueueReadBuffer(commands, var_sum_output, CL_TRUE, 0, sizeof(double)*numberOfWorkGroup, variance_sum_results, 0, NULL, NULL);
   if(error)
@@ -539,10 +531,6 @@ int main (int argc, char** argv)
   printf("parallel variance: %lf\n", variance);
   double std_dev = sqrt(variance);
   printf("parallel std deviation: %lf\n", std_dev);
-
-  t2 = getTime();
-
-  printf("GPU time taken: %6.5f secs \n", (t2-t1));
 
 
   clReleaseMemObject(input);
