@@ -16,7 +16,7 @@
 
 #define MAX_SOURCE_SIZE (0x100000)
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "256threes.txt" //<-- I'll give you seg fault if I dont exist !
+#define FILE_NAME "dataset_5M2.txt" //<-- I'll give you seg fault if I dont exist !
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -174,7 +174,7 @@ int main (int argc, char** argv)
   
   //holder for results from each workgroup
   //double results[numberOfWorkGroup];
-  results = malloc(data_size*sizeof(double)*numberOfWorkGroup);
+  results = malloc(data_size*sizeof(double));
   if(results == NULL)
   {
     printf("failed to malloc results!!! \n");
@@ -182,7 +182,7 @@ int main (int argc, char** argv)
 
   //initilise result array to 0
   int i = 0;
-  for(i = 0; i < numberOfWorkGroup*data_size; i++)
+  for(i = 0; i < data_size; i++)
   {
     results[i] = 0.0;
   }
@@ -269,7 +269,7 @@ int main (int argc, char** argv)
 
 
   cl_mem input = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
-  cl_mem output = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*numberOfWorkGroup*sizeof(double), NULL, NULL);
+  cl_mem output = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
 
   if(!input || !output)
   {
@@ -278,7 +278,7 @@ int main (int argc, char** argv)
   }
 
   error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(double) * data_size, data, 0, NULL, NULL);
-  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0,  data_size*numberOfWorkGroup*sizeof(double), results, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0,  data_size*sizeof(double), results, 0, NULL, NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -313,10 +313,11 @@ int main (int argc, char** argv)
 
   clFinish(commands);
 
-  error = clEnqueueReadBuffer(commands, output, CL_TRUE, 0, sizeof(double)*numberOfWorkGroup*data_size, results, 0, NULL, NULL);
+  error = clEnqueueReadBuffer(commands, output, CL_TRUE, 0, sizeof(double)*data_size, results, 0, NULL, NULL);
   if(error)
   {
     printf("failed to read results \n");
+    printf("error: %d\n", error);
     exit(1);
   }
 
@@ -329,7 +330,7 @@ int main (int argc, char** argv)
   for(i = 0; i < data_size; i++)
   {
     resultsFromGPU += results[i];
-    printf("index %d: %lf\n", i, results[i]);
+    //printf("index %d: %lf\n", i, results[i]);
   }
   //printf("i: %d\n", i);
 

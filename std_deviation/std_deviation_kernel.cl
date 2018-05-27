@@ -2,7 +2,7 @@ __kernel void std_deviation(__global const double* input, __global double* outpu
 
     int local_id = get_local_id(0);
     int global_id = get_global_id(0);
-    printf("global id: %d\n", global_id);
+    //printf("global id: %d\n", global_id);
 
     // calculate variance
     output[global_id] = (input[global_id] - mean) * (input[global_id] - mean);
