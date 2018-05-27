@@ -135,6 +135,8 @@ double calculateSequentialStdDev(double* input, int data_size, double mean) {
     sum += temp[i];
   }
 
+  printf("sequential variance: %lf\n", sum/data_size);
+
   return sqrt(sum/data_size);
 }
 
@@ -187,7 +189,7 @@ int main (int argc, char** argv)
 
   int numberOfWorkGroup = data_size/localSize;
 
-  printf("datasize: %d, workgroup: %d, numberofworkgroup: %d \n", data_size, WORK_GROUP_SIZE, numberOfWorkGroup);
+  printf("\ndatasize: %d, workgroup: %d, numberofworkgroup: %d \n", data_size, WORK_GROUP_SIZE, numberOfWorkGroup);
 
 
   //holder for std_dev_results from each workgroup
@@ -473,10 +475,10 @@ int main (int argc, char** argv)
 
   //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
 
-  averageFromGPU = std_dev_resultsFromGPU / data_size;
-  //printf("AVG :Results from GPU is %lf \n", averageFromGPU);
+  double variance = std_dev_resultsFromGPU / data_size;
+  printf("VARIANCE: %lf \n", variance);
 
-  std_dev = sqrt(averageFromGPU);
+  std_dev = sqrt(variance);
   printf("standard deviation: %lf\n", std_dev);
 
   t2 = getTime();
