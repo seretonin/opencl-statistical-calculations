@@ -171,7 +171,7 @@ int main (int argc, char** argv)
   int numberOfWorkGroup = data_size/localSize;
 
   printf("datasize: %d, workgroup: %d, numberofworkgroup: %d \n", data_size, WORK_GROUP_SIZE, numberOfWorkGroup);
-  
+
   //holder for results from each workgroup
   //double results[numberOfWorkGroup];
   results = malloc(data_size*sizeof(double));
@@ -232,16 +232,16 @@ int main (int argc, char** argv)
   }
 
   //create  program object for a context, load kernel code
-  cl_program program = clCreateProgramWithSource(context, 1,
+  cl_program std_dev_program = clCreateProgramWithSource(context, 1,
           (const char **)&source_str, (const size_t *)&source_size, &ret);
-  if(!program)
+  if(!std_dev_program)
   {
-    printf("cant create opencl program");
+    printf("cant create opencl std_dev_program");
     exit(1);
   }
 
-  //error = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
-  error = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+  //error = clBuildProgram(std_dev_program, 1, devices, NULL, NULL, NULL);
+  error = clBuildProgram(std_dev_program, 1, &device_id, NULL, NULL, NULL);
   if(error != CL_SUCCESS)
   {
     printf("%d\n", error);
@@ -249,19 +249,19 @@ int main (int argc, char** argv)
     size_t len;
     char *buffer;
 
-    printf("error: failed to build program executable \n");
+    printf("error: failed to build std_dev_program executable \n");
 
-    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
+    clGetProgramBuildInfo(std_dev_program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
     buffer = malloc(len);
-    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, len, buffer, NULL);
+    clGetProgramBuildInfo(std_dev_program, device_id, CL_PROGRAM_BUILD_LOG, len, buffer, NULL);
     printf("%s\n", buffer);
 
     exit(1);
   }
 
 
-  cl_kernel kernel = clCreateKernel(program, "std_deviation", &error);
-  if(!kernel || error != CL_SUCCESS)
+  cl_kernel std_dev_kernel = clCreateKernel(std_dev_program, "std_deviation", &error);
+  if(!std_dev_kernel || error != CL_SUCCESS)
   {
     printf("failed to create kernel \n");
     exit(1);
@@ -291,10 +291,10 @@ int main (int argc, char** argv)
   //set kernel arguments
   error = 0;
   double mean = 1;
-  error = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
-  error |= clSetKernelArg(kernel,1, sizeof(cl_mem), &output);
-  error |= clSetKernelArg(kernel,2, localSize*sizeof(double), NULL);
-  error |= clSetKernelArg(kernel, 3, sizeof(double), &mean);
+  error = clSetKernelArg(std_dev_kernel, 0, sizeof(cl_mem), &input);
+  error |= clSetKernelArg(std_dev_kernel,1, sizeof(cl_mem), &output);
+  error |= clSetKernelArg(std_dev_kernel,2, localSize*sizeof(double), NULL);
+  error |= clSetKernelArg(std_dev_kernel, 3, sizeof(double), &mean);
 
   if(error != CL_SUCCESS)
   {
@@ -304,10 +304,10 @@ int main (int argc, char** argv)
 
   //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
-  error = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
+  error = clEnqueueNDRangeKernel(commands, std_dev_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
   {
-    printf("failed to exe kernel %d \n", error);
+    printf("failed to exe std_dev_kernel %d \n", error);
     exit(1);
   }
 
@@ -353,8 +353,8 @@ int main (int argc, char** argv)
 
   clReleaseMemObject(input);
   clReleaseMemObject(output);
-  clReleaseProgram(program);
-  clReleaseKernel(kernel);
+  clReleaseProgram(std_dev_program);
+  clReleaseKernel(std_dev_kernel);
   clReleaseCommandQueue(commands);
   clReleaseContext(context);
 
