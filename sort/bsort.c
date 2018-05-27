@@ -12,21 +12,30 @@
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 #include "util.h"
-#include "clutil.h"
-#define SWAP(x,y) t = x; x = y; y = t;
+
 const cl_uint ascending_order = 1;
 
-void compare_seq(double *data, int i, int j, int dir)
+void compare_seq(double * data, int i, int j, int dir)
 {
-	double t;
 
-	if (dir == (data[i] > data[j]))
+	double a,b,temp = 0.0;
+	a = data[i];
+	b = data[j];
+	//printf("input:%f and %f\n",a,b);
+	if (a > b)
 	{
-		SWAP(data[i], data[j]);
+		//printf("before: %f and %f\n",a,b);
+		temp = data[i];
+		data[i] = data[j];
+		data[j] = temp;
+		//printf("after: %f and %f\n",data[i],data[j]);
+	}
+	else {
+		//printf("already sorted: %f and %f\n",a,b);
 	}
 }
 
-void bitonicmerge(double *data, int low, int c, int dir)
+void bitonicmerge(double* data, int low, int c, int dir)
 {
 	int k, i;
 
@@ -45,34 +54,40 @@ void bitonicmerge(double *data, int low, int c, int dir)
  * two halves of the array in opposite sorting orders
  * bitonicmerge will merge the resultant data
  */
-void recbitonic(double *data, int low, int c, int dir)
+void recbitonic(double* data, int low, int c, int dir)
 {
 	int k;
 	if (c > 1)
 	{
 		k = c / 2;
-		recbitonic(data, low, k, 1);
-		recbitonic(data, low + k, k, 0);
-		bitonicmerge(data,low, c, 1);
+		recbitonic(data,low,k,1);
+		recbitonic(data,low+k,k,0);
+		bitonicmerge(data,low,c,1);
 	}
 }
 
 /* 
  * Sorts the entire array
  */
-void sort(double *data,int length)
+void sort(double* data,int length)
 {
-	recbitonic(data,0, length, 1);
+	recbitonic(data,0,length,1);
 }
 
-int checkResult(double *data, int length, int ascend){
-    if (ascend == TRUE){
+int checkResult(double* data, int length, int ascend){
+	
+	double a,b;
+    if (ascend == TRUE) {
         for(int i = 0; i < length-1; i++){
-            if(data[i] > data[i+1]){
+			a = data[i];
+			b = data[i+1];
+			//printf("compare: %f and %f index: %d\n",a,b,i);
+            if (a > b) {
                 return FALSE;
             }
         }
-    }else{
+    } 
+	else {
         for(int i = 0; i < length; i++){
             if(data[i] < data[i+1]){
                 return FALSE;
@@ -104,14 +119,14 @@ void storeDataToProcess(double *data)
 	FILE *file = fopen(FILE_NAME, "r");
 	double num;
 	int i = 0;
+	//printf("\n-INPUT DATA----------------------------\n");		
 	while(fscanf(file, "%lf" ,&num) > 0)
 	{
 		data[i] = num;
-		//printf("%lf | %d\n", numcpy,i);
+		//printf("%f\n", data[i]); 		
 		i++;
 	}
 	fclose(file);
-	
 }
 
 double getTime(){
@@ -133,16 +148,15 @@ int main(int argc, char *argv[])
 	double t1 = 0.0;
 	double t2 = 0.0; 
 	double t_seq, t_par = 0.0;
-	double median_seq, min_seq, max_seq = 0.0;	
-	double median_par, min_par, max_par = 0.0;	
+	double median, min, max = 0.0;		
 
     double* input;    //input array on host
-    double* input_seq;    //input array on host
     double* output;   //output array on host
     	
 	int length;
 	length = countDataEntries();
 	
+  	double* input_seq;    //input array on host
 	int datasize;
 	datasize = length*sizeof(double);
 	
@@ -152,43 +166,33 @@ int main(int argc, char *argv[])
 	}
 	
 	input_seq = (double *)malloc(length *sizeof(double));
-	if (input == NULL) {
-		printf("memory allocation for input was not succesful");
-	}
-		
-	storeDataToProcess(input);
+
+	//storeDataToProcess(input);
 	storeDataToProcess(input_seq);
 	
-	//print the input data
-	/*for(unsigned int i = 0; i < length; i++) {
-		printf("%f\t\t\t\t", input_seq[i]); 
-		if (i%3 == 0) {
-			printf("\n");
-		}
-	}*/
-	
+
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//START OF SEQUENTIAL CALCULATIONS////////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	t1 = getTime();
 	sort(input_seq,length);
-	median_seq = input_seq[length/2];
-	min_seq = input_seq[0];
-	max_seq = input_seq[length-1];	
+	int v = checkResult(input_seq,length,ascending_order);
+	printf("%d",v);
+	median = input_seq[(length-1)/2];
+	min = input_seq[0];
+	max = input_seq[length-2];	
 	t2 = getTime();
 	t_seq = t2 - t1;
-	
+
+
+	//print the input data
+	/*printf("\n-AFTER SORTING------------------------\n");	
+	for(unsigned int i = 0; i < length; i++) {
+		printf("%f\n", input_seq[i]); 
+	}*/
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//END OF SEQUENTIAL CALCULATIONS//////////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	printf("\n");
-	printf("-SEQUENTIAL----------------------------");
-	printf("\n\n");		
-	printf("median          : %lf\n",median_seq);
-	printf("min             : %lf\n",min_seq);
-	printf("max             : %lf\n",max_seq);
-	printf("time taken      : %6.6f secs\n",t_seq);		
 	
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//START OF OPENCL PARALLEL CALCULATIONS///////////////////////////////////////////////////////////////////////
@@ -231,12 +235,12 @@ int main(int argc, char *argv[])
 	//create a context
 	cl_context ctx = NULL;
 	ctx = clCreateContext(NULL, 1, &devices, NULL, NULL, &error);
-	clCheckEqWithMsg(error, CL_SUCCESS, "creation of context was not successful");
+	//clCheckEqWithMsg(error, CL_SUCCESS, "creation of context was not successful");
 
 	//create a command queue
 	cl_command_queue queue;
 	queue = clCreateCommandQueue(ctx, devices, 0, &error);
-	clCheckEqWithMsg(error, CL_SUCCESS, "creation of command queue was not succesful");
+	//clCheckEqWithMsg(error, CL_SUCCESS, "creation of command queue was not succesful");
 
 	//create a program using clCreateProgramWithSource()
 	FILE *fp;
@@ -253,17 +257,17 @@ int main(int argc, char *argv[])
 	fclose(fp);
 	
 	
-	cl_program program = clCreateProgramWithSource(ctx,1,(const char**)&pgmSource,(const size_t *)&source_size,&error);
-    clCheckEqWithMsg(error, CL_SUCCESS, "can't create program..");
+	cl_program program = clCreateProgramWithSource(ctx,1,(const char**)&pgmSource,(const size_t*)&source_size,&error);
+    //clCheckEqWithMsg(error, CL_SUCCESS, "can't create program..");
 	
  	//build (compile) the program for the device(s)
 	error = clBuildProgram(program,1, &devices, NULL, NULL, NULL);
-    clCheckEqWithMsg(error, CL_SUCCESS, "Can't build program.");
+    //clCheckEqWithMsg(error, CL_SUCCESS, "Can't build program.");
      
 	//create the kernel
 	cl_kernel kernel = NULL;
 	kernel = clCreateKernel(program, "parallelBitonicSort", &error);
-	clCheckEqWithMsg(error, CL_SUCCESS, "Can't get kernel from program.");
+	//clCheckEqWithMsg(error, CL_SUCCESS, "Can't get kernel from program.");
 	   
  	//create device buffers
     cl_mem inputBuffer = NULL;  //input array on the device
@@ -272,24 +276,24 @@ int main(int argc, char *argv[])
 	{
 		printf("something wrong with input buffer??");
 	}
-    clCheckEqWithMsg(error, CL_SUCCESS, "can't create device buffer...\n");
+    //clCheckEqWithMsg(error, CL_SUCCESS, "can't create device buffer...\n");
 
 	cl_mem outputBuffer = NULL;
 	outputBuffer = clCreateBuffer(ctx, CL_MEM_WRITE_ONLY,datasize, NULL, NULL);
-    clCheckEqWithMsg(error, CL_SUCCESS, "can't create device buffer...\n");
+    //clCheckEqWithMsg(error, CL_SUCCESS, "can't create device buffer...\n");
    
  	//write host data to device buffers
 	error = clEnqueueWriteBuffer(queue, inputBuffer, CL_FALSE, 0,datasize, input, 0, NULL, NULL);
-    clCheckEqWithMsg(error, CL_SUCCESS, "can't write host data to device buffer.\n");
+    //clCheckEqWithMsg(error, CL_SUCCESS, "can't write host data to device buffer.\n");
 
 	error = clEnqueueReadBuffer(queue, outputBuffer, CL_TRUE, 0,datasize, output, 0, NULL, NULL);
-    clCheckEqWithMsg(error, CL_SUCCESS, "can't write host data to device buffer.\n");   
+    //clCheckEqWithMsg(error, CL_SUCCESS, "can't write host data to device buffer.\n");   
     
  	//set the kernel arguments
  	error = 0;
     error = clSetKernelArg(kernel, 0, sizeof(cl_mem),(void*)&inputBuffer);
     error |= clSetKernelArg(kernel, 3, sizeof(cl_uint),(void*)&ascending_order);
-	clCheckEqWithMsg(error, CL_SUCCESS, "Can't set kernel's arguments.");
+	//clCheckEqWithMsg(error, CL_SUCCESS, "Can't set kernel's arguments.");
    
 	//enqueue the kernel for execution
     cl_uint stages = 0;
@@ -304,42 +308,42 @@ int main(int argc, char *argv[])
             cl_event exeEvt;
             error = clEnqueueNDRangeKernel(queue,kernel,1,NULL,&globalThreads,&threadsPerGroup,0,NULL,&exeEvt);
             clWaitForEvents(1, &exeEvt);
-            clCheckEqWithMsg(error, CL_SUCCESS, "Kernel execution failure!\n");
+            //clCheckEqWithMsg(error, CL_SUCCESS, "Kernel execution failure!\n");
 		}
     }    
     	
 	//read the output buffer back to the host
 	error = clEnqueueReadBuffer(queue,inputBuffer,CL_TRUE,0,length*sizeof(double),output,0,NULL,NULL);
-	clCheckEqWithMsg(error, CL_SUCCESS, "can't write to host from device.\n");
+	//clCheckEqWithMsg(error, CL_SUCCESS, "can't write to host from device.\n");
 	
 	//calculate the statistical values
-	median_par = output[length/2];
-	min_par = output[0];
-	max_par = output[length-1];
+	median = input_seq[(length-1)/2];
+	min = input_seq[0];
+	max = input_seq[length-2];
 	
 	t2 = getTime();
 	t_par = t2 - t1;
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//END OF OPENCL PARALLEL CALCULATIONS/////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	printf("\n");
+	printf("-SEQUENTIAL----------------------------");
+	printf("\n\n");		
+	printf("median          : %lf\n",median);
+	printf("min             : %lf\n",min);
+	printf("max             : %lf\n",max);
+	printf("time taken      : %6.6f secs\n",t_seq);			
 	
-	//print the sorted data
-	/*for(unsigned int i = 0; i < length; i++) {
-		printf("%f\t\t\t\t", input_seq[i]); 
-		if (i%3 == 0) {
-			printf("\n");
-		}
-	}*/
-
-
+	
     int ret = checkResult(output, length, ascending_order);
     if (ret == TRUE) {
 		printf("\n");		
 		printf("-PARALLEL-------------------------------");
 		printf("\n\n");		
-		printf("median          : %lf\n",median_seq);
-		printf("min             : %lf\n",min_seq);
-		printf("max             : %lf\n",max_seq);
+		printf("median          : %lf\n",median);
+		printf("min             : %lf\n",min);
+		printf("max             : %lf\n",max);
 		printf("time taken      : %6.6f secs\n",t_par);				
 	}							
     else {

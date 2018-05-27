@@ -9,8 +9,8 @@ OPENCL_INC_PATH = -I/opt/AMDAPPSDK-2.9-1/include
 OPENCL_LIB_PATH = -L/opt/AMDAPPSDK-2.9-1/lib/x86_64
 
 OUTPUT_FILE = a
-SOURCES = bsort.c util.c clutil.c
-OBJS = bsort.o util.o clutil.o
+SOURCES = bsort.c util.c
+OBJS = bsort.o util.o
 
 all: $(OUTPUT_FILE)
 
