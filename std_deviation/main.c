@@ -111,7 +111,7 @@ double seq_average(double* data, int data_size)
 
         for(i = 0; i < data_size; i++)
         {
-          accumulate += (data[i] - 1) * (data[i] - 1);
+          accumulate += data[i];
         }
 
         average = accumulate/data_size;
@@ -124,13 +124,29 @@ double seq_average(double* data, int data_size)
   return average;
 }
 
+
+// calculate standard deviation sequentially
+double calculateSequentialStdDev(double* input, int data_size, double mean) {
+  int i;
+  double* temp = malloc(data_size * sizeof(double));
+  double sum = 0;
+  for (i = 0; i < data_size; i++) {
+    temp[i] = (input[i] - mean) * (input[i] - mean);
+    sum += temp[i];
+  }
+
+  return sqrt(sum/data_size);
+}
+
+
 int main (int argc, char** argv)
 {
   //count how many entries are there
   double* data;
-  double* results;
+  double* std_dev_results;
+  double* sum_results;
 
-  int data_size; 
+  int data_size;
   data_size = countDataEntries();
 
   printf("Count: %d \n",data_size);
@@ -147,9 +163,10 @@ int main (int argc, char** argv)
 
   double average = 0.0;
   average = seq_average(data,data_size);
+  double seq_std_dev = calculateSequentialStdDev(data, data_size, average);
 
   printf("sequential avg = %lf \n", average);
-  printf("sequential std_deviation: %lf\n", sqrt(average));
+  printf("sequential std_deviation: %lf\n", seq_std_dev);
   //DONE SEQUENTIAL--
 
  //START OPENCL CALCULATIONs
@@ -171,20 +188,35 @@ int main (int argc, char** argv)
   int numberOfWorkGroup = data_size/localSize;
 
   printf("datasize: %d, workgroup: %d, numberofworkgroup: %d \n", data_size, WORK_GROUP_SIZE, numberOfWorkGroup);
-  
-  //holder for results from each workgroup
-  //double results[numberOfWorkGroup];
-  results = malloc(data_size*sizeof(double));
-  if(results == NULL)
+
+
+  //holder for std_dev_results from each workgroup
+  //double std_dev_results[numberOfWorkGroup];
+  std_dev_results = malloc(data_size*sizeof(double));
+  if(std_dev_results == NULL)
   {
-    printf("failed to malloc results!!! \n");
+    printf("failed to malloc std_dev_results!!! \n");
   }
 
   //initilise result array to 0
   int i = 0;
   for(i = 0; i < data_size; i++)
   {
-    results[i] = 0.0;
+    std_dev_results[i] = 0.0;
+  }
+
+  //holder for sum_results from each workgroup
+  //double sum_results[numberOfWorkGroup];
+  sum_results = malloc(numberOfWorkGroup*sizeof(double));
+  if(sum_results == NULL)
+  {
+    printf("failed to malloc sum_results!!! \n");
+  }
+
+  //initilise result array to 0
+  for(i = 0; i < numberOfWorkGroup; i++)
+  {
+    sum_results[i] = 0.0;
   }
 
 
@@ -231,17 +263,38 @@ int main (int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  //create  program object for a context, load kernel code
-  cl_program program = clCreateProgramWithSource(context, 1,
-          (const char **)&source_str, (const size_t *)&source_size, &ret);
-  if(!program)
+  // create sum program
+  cl_program sum_program = clCreateProgramWithSource(context, 1, (const char **)&parallelSum_kernel, NULL, &error);
+  if(!sum_program)
   {
     printf("cant create opencl program");
     exit(1);
   }
 
-  //error = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
-  error = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+  //create  program object for a context, load kernel code
+  cl_program std_dev_program = clCreateProgramWithSource(context, 1,
+          (const char **)&source_str, (const size_t *)&source_size, &ret);
+  if(!std_dev_program)
+  {
+    printf("cant create opencl std_dev_program");
+    exit(1);
+  }
+
+  // build sum program
+  error = clBuildProgram(sum_program, 1, &device_id, NULL, NULL, NULL);
+  if(error != CL_SUCCESS)
+  {
+    size_t len;
+    char buffer[2048];
+
+    printf("Error: Failed to build sum_program executable!\n");
+    clGetProgramBuildInfo(sum_program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
+    printf("%s\n", buffer);
+    exit(1);
+  }
+
+  //error = clBuildProgram(std_dev_program, 1, devices, NULL, NULL, NULL);
+  error = clBuildProgram(std_dev_program, 1, &device_id, NULL, NULL, NULL);
   if(error != CL_SUCCESS)
   {
     printf("%d\n", error);
@@ -249,19 +302,28 @@ int main (int argc, char** argv)
     size_t len;
     char *buffer;
 
-    printf("error: failed to build program executable \n");
+    printf("error: failed to build std_dev_program executable \n");
 
-    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
+    clGetProgramBuildInfo(std_dev_program, device_id, CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
     buffer = malloc(len);
-    clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, len, buffer, NULL);
+    clGetProgramBuildInfo(std_dev_program, device_id, CL_PROGRAM_BUILD_LOG, len, buffer, NULL);
     printf("%s\n", buffer);
 
     exit(1);
   }
 
 
-  cl_kernel kernel = clCreateKernel(program, "std_deviation", &error);
-  if(!kernel || error != CL_SUCCESS)
+  // create sum kernel
+  cl_kernel sum_kernel = clCreateKernel(sum_program, "parallelSum", &error);
+  if(!sum_kernel || error != CL_SUCCESS)
+  {
+    printf("failed to create sum_kernel \n");
+    exit(1);
+  }
+
+  // create std_dev kernel
+  cl_kernel std_dev_kernel = clCreateKernel(std_dev_program, "std_deviation", &error);
+  if(!std_dev_kernel || error != CL_SUCCESS)
   {
     printf("failed to create kernel \n");
     exit(1);
@@ -269,16 +331,11 @@ int main (int argc, char** argv)
 
 
   cl_mem input = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
-  cl_mem output = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
+  cl_mem sum_output = clCreateBuffer(context, CL_MEM_READ_ONLY, numberOfWorkGroup*sizeof(double), NULL, NULL);
 
-  if(!input || !output)
-  {
-    printf("cant create buffer");
-    exit(1);
-  }
 
   error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(double) * data_size, data, 0, NULL, NULL);
-  error = clEnqueueWriteBuffer(commands, output, CL_TRUE, 0,  data_size*sizeof(double), results, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, sum_output, CL_TRUE, 0,  numberOfWorkGroup*sizeof(double), sum_results, 0, NULL, NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -291,10 +348,9 @@ int main (int argc, char** argv)
   //set kernel arguments
   error = 0;
   double mean = 1;
-  error = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
-  error |= clSetKernelArg(kernel,1, sizeof(cl_mem), &output);
-  error |= clSetKernelArg(kernel,2, localSize*sizeof(double), NULL);
-  error |= clSetKernelArg(kernel, 3, sizeof(double), &mean);
+  error = clSetKernelArg(sum_kernel, 0, sizeof(cl_mem), &input);
+  error |= clSetKernelArg(sum_kernel,1, sizeof(cl_mem), &sum_output);
+  error |= clSetKernelArg(sum_kernel,2, localSize*sizeof(double), NULL);
 
   if(error != CL_SUCCESS)
   {
@@ -304,44 +360,121 @@ int main (int argc, char** argv)
 
   //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
-  error = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
+  error = clEnqueueNDRangeKernel(commands, sum_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
   {
-    printf("failed to exe kernel %d \n", error);
+    printf("failed to exe sum_kernel %d \n", error);
     exit(1);
   }
 
   clFinish(commands);
 
-  error = clEnqueueReadBuffer(commands, output, CL_TRUE, 0, sizeof(double)*data_size, results, 0, NULL, NULL);
+  error = clEnqueueReadBuffer(commands, sum_output, CL_TRUE, 0, sizeof(double)*numberOfWorkGroup, sum_results, 0, NULL, NULL);
   if(error)
   {
-    printf("failed to read results \n");
+    printf("failed to read sum_results \n");
+    printf("error: %d\n", error);
+    exit(1);
+  }
+
+    //Read the std_dev_results from GPU
+  double sum_resultsFromGPU = 0;
+  double averageFromGPU = 0;
+
+  for(i = 0; i < numberOfWorkGroup; i++)
+  {
+    sum_resultsFromGPU += sum_results[i];
+    //printf("index %d: %lf\n", i, sum_results[i]);
+  }
+  //printf("i: %d\n", i);
+
+  // for (i = 0; i < data_size; i++) {
+  //   printf("index %d: %lf\n", i, std_dev_results[i]);
+  // }
+
+  //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
+
+  averageFromGPU = sum_resultsFromGPU / data_size;
+  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
+
+
+
+  // STD DEV STARTS HERE
+
+
+  cl_mem std_dev_output = clCreateBuffer(context, CL_MEM_READ_ONLY, data_size*sizeof(double), NULL, NULL);
+
+  if(!input || !std_dev_output)
+  {
+    printf("cant create buffer");
+    exit(1);
+  }
+
+  error = clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, sizeof(double) * data_size, data, 0, NULL, NULL);
+  error = clEnqueueWriteBuffer(commands, std_dev_output, CL_TRUE, 0,  data_size*sizeof(double), std_dev_results, 0, NULL, NULL);
+
+  if(error != CL_SUCCESS)
+  {
+    printf("error failed to enqueu buffer to device\n");
     printf("error: %d\n", error);
     exit(1);
   }
 
 
-  //Read the results from GPU
-  double resultsFromGPU = 0;
-  double averageFromGPU = 0;
+  //set kernel arguments
+  error = 0;
+  //double mean = 1;
+  error = clSetKernelArg(std_dev_kernel, 0, sizeof(cl_mem), &input);
+  error |= clSetKernelArg(std_dev_kernel,1, sizeof(cl_mem), &std_dev_output);
+  error |= clSetKernelArg(std_dev_kernel,2, localSize*sizeof(double), NULL);
+  error |= clSetKernelArg(std_dev_kernel, 3, sizeof(double), &averageFromGPU);
+
+  if(error != CL_SUCCESS)
+  {
+    printf("failed to set arguments \n");
+    exit(1);
+  }
+
+  //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
+  //enqueue command to execute on device
+  error = clEnqueueNDRangeKernel(commands, std_dev_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
+  if(error != CL_SUCCESS)
+  {
+    printf("failed to exe std_dev_kernel %d \n", error);
+    exit(1);
+  }
+
+  clFinish(commands);
+
+  error = clEnqueueReadBuffer(commands, std_dev_output, CL_TRUE, 0, sizeof(double)*data_size, std_dev_results, 0, NULL, NULL);
+  if(error)
+  {
+    printf("failed to read std_dev_results \n");
+    printf("error: %d\n", error);
+    exit(1);
+  }
+
+
+  //Read the std_dev_results from GPU
+  double std_dev_resultsFromGPU = 0;
+  //double averageFromGPU = 0;
   double std_dev = 0;
 
   for(i = 0; i < data_size; i++)
   {
-    resultsFromGPU += results[i];
-    //printf("index %d: %lf\n", i, results[i]);
+    std_dev_resultsFromGPU += std_dev_results[i];
+    //printf("index %d: %lf\n", i, std_dev_results[i]);
   }
   //printf("i: %d\n", i);
 
   // for (i = 0; i < data_size; i++) {
-  //   printf("index %d: %lf\n", i, results[i]);
+  //   printf("index %d: %lf\n", i, std_dev_results[i]);
   // }
 
-  //printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
+  //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
 
-  averageFromGPU = resultsFromGPU / data_size;
-  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
+  averageFromGPU = std_dev_resultsFromGPU / data_size;
+  //printf("AVG :Results from GPU is %lf \n", averageFromGPU);
 
   std_dev = sqrt(averageFromGPU);
   printf("standard deviation: %lf\n", std_dev);
@@ -352,9 +485,10 @@ int main (int argc, char** argv)
 
 
   clReleaseMemObject(input);
-  clReleaseMemObject(output);
-  clReleaseProgram(program);
-  clReleaseKernel(kernel);
+  clReleaseMemObject(std_dev_output);
+  clReleaseProgram(std_dev_program);
+  clReleaseProgram(sum_program);
+  clReleaseKernel(std_dev_kernel);
   clReleaseCommandQueue(commands);
   clReleaseContext(context);
 
