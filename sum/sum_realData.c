@@ -15,7 +15,7 @@
 #endif
 
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "dataset_5M.txt" //<-- I'll give you seg fault if I dont exist !
+#define FILE_NAME "randomdata.csv" //<-- I'll give you seg fault if I dont exist !
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -133,6 +133,16 @@ int main (int argc, char** argv)
 
   printf("Count: %d \n",data_size);
 
+
+  size_t globalSize = data_size;
+  size_t localSize = WORK_GROUP_SIZE;
+
+  if((data_size % localSize) != 0)
+  {
+    printf("data size is not divisible by workgroup size. Datasize is : %d, workgroup size: %d \n", data_size, WORK_GROUP_SIZE);
+    exit(1);
+  }
+
   //double data[data_size];
   data = malloc(data_size *sizeof(double));
   if(data == NULL)
@@ -153,17 +163,11 @@ int main (int argc, char** argv)
   double t1 = 0.0;
   double t2 = 0.0;
 
-  t1 = getTime();
+  //For Reading the results from GPU
+  double resultsFromGPU = 0;
+  double averageFromGPU = 0;
+
   int error;
-
-  size_t globalSize = data_size;
-  size_t localSize = WORK_GROUP_SIZE;
-
-  if((data_size % localSize) != 0)
-  {
-    printf("data size is not divisible by workgroup size. Datasize is : %d, workgroup size: %d \n", data_size, WORK_GROUP_SIZE);
-    exit(1);
-  }
 
   int numberOfWorkGroup = data_size/localSize;
 
@@ -269,7 +273,8 @@ int main (int argc, char** argv)
     exit(1);
   }
 
-  //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
+  //START PARALLEL MEASUREMENT-- includes, execution of kernel, reading of buffer, and summing of workgroup sums on host
+  t1 = getTime(); 
   //enqueue command to execute on device
   error = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
@@ -287,23 +292,18 @@ int main (int argc, char** argv)
     exit(1);
   }
 
-
-  //Read the results from GPU
-  double resultsFromGPU = 0;
-  double averageFromGPU = 0;
-
   for(i = 0; i < numberOfWorkGroup; i++)
   {
     resultsFromGPU += results[i];
   }
 
-  printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
-
   averageFromGPU = resultsFromGPU / data_size;
-  
-  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
 
   t2 = getTime();
+
+  printf("SUM :Results from GPU is %lf \n", resultsFromGPU);
+
+  printf("AVG :Results from GPU is %lf \n", averageFromGPU);
 
   printf("GPU time taken: %6.5f secs \n", (t2-t1));
 
