@@ -3,21 +3,21 @@
 
 ----
 
-####Datasets use in this project are too large and cannot be pushed to GitHub. Please download it from Google by following this link: https://drive.google.com/open?id=1AD47aQAy_5L-cw2BQdK0uQ0hWopLmvHf (~920MB datasets.zip file, 2GB expanded)
+#### Datasets use in this project are too large and cannot be pushed to GitHub. Please download it from Google by following this link: https://drive.google.com/open?id=1AD47aQAy_5L-cw2BQdK0uQ0hWopLmvHf (~920MB datasets.zip file, 2GB expanded)
 
 ----
 
 
-#Instructions on how to test each feature (Assuming running on Ubuntu):
+# Instructions on how to test each feature (Assuming running on Ubuntu):
 
-##Summation/Mean 
+## Summation/Mean 
 
 1) Navigate to sum_mean folder
 2) Locate sum_realData.c, edit FILENAME and WORK_GROUP_SIZE for each testing
 3) Make an executable out of sum_realData.c with a command "gcc sum_realData.c -o sum_realData -lOpenCL"
 4) Run it
 
-##Standard Deviation
+## Standard Deviation
 1) Navigate to std_deviation folder
 2) Open terminal and execute the command "make"
 3) Execute "./main.exe"
