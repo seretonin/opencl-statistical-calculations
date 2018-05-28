@@ -1,0 +1,55 @@
+WG size = 2, Dataset = dataset_50K.txt
+WG size = 8, Dataset = dataset_50K.txt
+WG size = 16, Dataset = dataset_50K.txt
+WG size = 32, Dataset = dataset_50K.txt
+WG size = 64, Dataset = dataset_50K.txt
+WG size = 1024, Dataset = dataset_50K.txt
+
+WG size = 2, Dataset = dataset_100K.txt
+WG size = 8, Dataset = dataset_100K.txt
+WG size = 16, Dataset = dataset_100K.txt
+WG size = 32, Dataset = dataset_100K.txt
+WG size = 64, Dataset = dataset_100K.txt
+WG size = 1024, Dataset = dataset_100K.txt
+
+WG size = 2, Dataset = dataset_500K.txt
+WG size = 8, Dataset = dataset_500K.txt
+WG size = 16, Dataset = dataset_500K.txt
+WG size = 32, Dataset = dataset_500K.txt
+WG size = 64, Dataset = dataset_500K.txt
+WG size = 1024, Dataset = dataset_500K.txt
+
+WG size = 2, Dataset = dataset_1M.txt
+WG size = 8, Dataset = dataset_1M.txt
+WG size = 16, Dataset = dataset_1M.txt
+WG size = 32, Dataset = dataset_1M.txt
+WG size = 64, Dataset = dataset_1M.txt
+WG size = 1024, Dataset = dataset_1M.txt
+
+WG size = 2, Dataset = dataset_5M.txt
+WG size = 8, Dataset = dataset_5M.txt
+WG size = 16, Dataset = dataset_5M.txt
+WG size = 32, Dataset = dataset_5M.txt
+WG size = 64, Dataset = dataset_5M.txt
+WG size = 1024, Dataset = dataset_5M.txt
+
+WG size = 2, Dataset = dataset_10M.txt
+WG size = 8, Dataset = dataset_10M.txt
+WG size = 16, Dataset = dataset_10M.txt
+WG size = 32, Dataset = dataset_10M.txt
+WG size = 64, Dataset = dataset_10M.txt
+WG size = 1024, Dataset = dataset_10M.txt
+
+WG size = 2, Dataset = dataset_25M.txt
+WG size = 8, Dataset = dataset_25M.txt
+WG size = 16, Dataset = dataset_25M.txt
+WG size = 32, Dataset = dataset_25M.txt
+WG size = 64, Dataset = dataset_25M.txt
+WG size = 1024, Dataset = dataset_25M.txt
+
+WG size = 2, Dataset = dataset_50M.txt
+WG size = 8, Dataset = dataset_50M.txt
+WG size = 16, Dataset = dataset_50M.txt
+WG size = 32, Dataset = dataset_50M.txt
+WG size = 64, Dataset = dataset_50M.txt
+WG size = 1024, Dataset = dataset_50M.txt

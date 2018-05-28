@@ -1,4 +1,4 @@
-//hi2
+//hi3
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +15,7 @@
 #endif
 
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "randomdata.csv" //<-- I'll give you seg fault if I dont exist !
+#define FILE_NAME "dataset_50K.txt" //<-- I'll give you seg fault if I dont exist !
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -81,6 +81,7 @@ void storeDataToProcess(double* data)
 	while(fscanf(file, "%lf" ,&num) > 0)
 	{
 		data[i] = num;
+    //data[i] = i;
     i++;
 	}
 	fclose(file);

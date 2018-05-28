@@ -21,3 +21,9 @@
 1) Navigate to std_deviation folder
 2) Open terminal and execute the command "make"
 3) Execute "./main.exe"
+
+## Median/Max/Min/Upper Quartile/Lower Quartile
+1) Navigate to sort folder
+2) Open terminal and execute the command "make"
+3) Execute "./a"
+4) Test cases are listed down in a file within the directory named "possible test cases.txt"
