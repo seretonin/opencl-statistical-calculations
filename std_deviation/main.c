@@ -1,4 +1,3 @@
-//hi2
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +8,6 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-//include windowsopencl
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
 #else
@@ -18,7 +16,7 @@
 
 #define MAX_SOURCE_SIZE (0x100000)
 #define WORK_GROUP_SIZE 64
-#define FILE_NAME "dataset_5M2.txt" //<-- I'll give you seg fault if I dont exist !
+#define FILE_NAME "dataset_50K.txt" // DATASET FILE HERE
 #define GPU "GeForce"
 
 const char *parallelSum_kernel = "\n" \
@@ -85,7 +83,6 @@ void storeDataToProcess(double* data)
 	{
 		data[i] = num;
     i++;
-    //printf("num: %lf", num);
 	}
 	fclose(file);
 }
@@ -99,29 +96,22 @@ void testPrintData(double* data, int data_size)
   }
 }
 
+
+// calculate average sequentially
 double seq_average(double* data, int data_size)
 {
-  // double t1 = 0.0;
-  // double t2 = 0.0;
+  int i;
+  double average = 0;
+  double accumulate = 0;
 
-  // //START MEASUREMENT FOR SEQUENTIAL SUM / MEAN
-  // t1 = getTime();
+  for(i = 0; i < data_size; i++)
+  {
+    accumulate += data[i];
+  }
 
-        int i;
-        double average = 0;
-        double accumulate = 0;
+  average = accumulate/data_size;
 
-        for(i = 0; i < data_size; i++)
-        {
-          accumulate += data[i];
-        }
-
-        average = accumulate/data_size;
-
-  //t2 = getTime();
-  //STOP MEASUREMENT FOR SEQ sum and mean
   printf("seq sum : %lf \n", accumulate);
-  //printf("time taken seq: %6.5f secs \n", (t2-t1));
 
   return average;
 }
@@ -155,7 +145,6 @@ int main (int argc, char** argv)
 
   printf("Count: %d \n",data_size);
 
-  //double data[data_size];
   data = malloc(data_size *sizeof(double));
   if(data == NULL)
   {
@@ -163,7 +152,6 @@ int main (int argc, char** argv)
   }
 
 	storeDataToProcess(data);
-  //testPrintData(data, data_size);
 
   double average = 0.0;
   double t0 = getTime();
@@ -180,10 +168,6 @@ int main (int argc, char** argv)
   //DONE SEQUENTIAL--
 
  //START OPENCL CALCULATIONs
-  // double t1 = 0.0;
-  // double t2 = 0.0;
-
-  //t1 = getTime();
   int error;
 
   size_t globalSize = data_size;
@@ -201,7 +185,6 @@ int main (int argc, char** argv)
 
 
   //holder for std_dev_results from each workgroup
-  //double std_dev_results[numberOfWorkGroup];
   std_dev_results = malloc(data_size*sizeof(double));
   if(std_dev_results == NULL)
   {
@@ -216,7 +199,6 @@ int main (int argc, char** argv)
   }
 
   //holder for sum_results from each workgroup
-  //double sum_results[numberOfWorkGroup];
   sum_results = malloc(numberOfWorkGroup*sizeof(double));
   if(sum_results == NULL)
   {
@@ -303,7 +285,6 @@ int main (int argc, char** argv)
     exit(1);
   }
 
-  //error = clBuildProgram(std_dev_program, 1, devices, NULL, NULL, NULL);
   error = clBuildProgram(std_dev_program, 1, &device_id, NULL, NULL, NULL);
   if(error != CL_SUCCESS)
   {
@@ -370,7 +351,6 @@ int main (int argc, char** argv)
 
   t0 = getTime();
 
-  //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
   //enqueue command to execute on device
   error = clEnqueueNDRangeKernel(commands, sum_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
@@ -399,15 +379,7 @@ int main (int argc, char** argv)
   for(i = 0; i < numberOfWorkGroup; i++)
   {
     sum_resultsFromGPU += sum_results[i];
-    //printf("index %d: %lf\n", i, sum_results[i]);
   }
-  //printf("i: %d\n", i);
-
-  // for (i = 0; i < data_size; i++) {
-  //   printf("index %d: %lf\n", i, std_dev_results[i]);
-  // }
-
-  //printf("SUM :Results from GPU is %lf \n", std_dev_resultsFromGPU);
 
   averageFromGPU = sum_resultsFromGPU / data_size;
   printf("AVG :Results from GPU is %lf \n", averageFromGPU);
@@ -451,7 +423,7 @@ int main (int argc, char** argv)
   }
 
   t2 = getTime();
-  //printf("global : local item size = %zu, %zu \n", global, WG_SIZE);
+
   //enqueue command to execute on device
   error = clEnqueueNDRangeKernel(commands, std_dev_kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
   if(error != CL_SUCCESS)
@@ -526,7 +498,6 @@ int main (int argc, char** argv)
   for(i = 0; i < numberOfWorkGroup; i++)
   {
     var_sum_final += variance_sum_results[i];
-    //printf("index %d: %lf\n", i, sum_results[i]);
   }
 
   double variance = var_sum_final/data_size;
