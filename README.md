@@ -1,14 +1,17 @@
 # Parallel computation of statistical values in OpenCL  | Mon 23 Apr
 When working with data sets created from natural processes, it is often important to get statistical values for these datasets. This assignment requires you to implement the calculation of statistical values over large data sets in parallel, for example the average, median, standard deviation etc. You will implement these algorithms in OpenCL (Open Computing Language), a (low level) language based on C (C99) and an API for implementing high performance and parallel computing code. OpenCL's goal is to be cross platform, in particular for the programming of acceleration units, such as graphics cards (GPUs) or FPGAs. You will need to implement and accelerate the calculation of statistical values for large input data sets. The target platform can be CPU or GPU (or FPGA boards in the PARC lab for Computer Systems students!).
 
-## TODO:
-- Research OpenCL
-- Research cross-platform abilities 
-- Implement MATLAB sequential calculation as benchmark
-- Parallelise calculation of average/median/standard deviation etc 
-- Improve performance if possible
-- Test cross-platform performance
+Datasets use in this project are too large and cannot be pushed to GitHub. Please download it from Google by following this link: https://drive.google.com/open?id=1AD47aQAy_5L-cw2BQdK0uQ0hWopLmvHf (~920MB datasets.zip file, 2GB expanded)
+
+
+Instructions on how to test each feature (Assuming running on Ubuntu):
+
+To run Summation / Mean Calculation
+
+1) Navigate to sum_mean folder
+2) Locate sum_realData.c, edit FILENAME and WORK_GROUP_SIZE for each testing
+3) Make an executable out of sum_realData.c with a command "gcc sum_realData.c -o sum_realData -lOpenCL"
+4) Run it
 
 
 
-https://developer.nvidia.com/opencl code examples from nvidia :-) 
